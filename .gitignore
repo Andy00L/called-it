@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.env
+.env.local
+*.local
+
+# secrets: never commit wallet keypairs
+wallet.json
+*.keypair.json
+
+# spike logs
+spike/logs/
+*.ndjson

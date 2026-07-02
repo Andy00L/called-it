@@ -1,0 +1,8 @@
+{
+  "name": "calledit",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "typecheck": "pnpm -r run typecheck"
+  }
+}

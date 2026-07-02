@@ -1,0 +1,29 @@
+{
+  "name": "@calledit/spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "gen:wallet": "tsx src/00-gen-wallet.ts",
+    "auth": "tsx src/01-guest-auth.ts",
+    "subscribe": "tsx src/02-subscribe.ts",
+    "activate": "tsx src/03-activate.ts",
+    "snapshots": "tsx src/04-snapshots.ts",
+    "stream:scores": "tsx src/05-stream-scores.ts",
+    "stream:odds": "tsx src/06-stream-odds.ts"
+  },
+  "dependencies": {
+    "@calledit/txline": "workspace:*",
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.98.0",
+    "dotenv": "^16.4.7",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@calledit/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/points.test.ts src/score.test.ts src/calls.test.ts src/odds.test.ts src/catalog.test.ts src/replay.test.ts"
+  },
+  "dependencies": {
+    "@calledit/txline": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
+  }
+}

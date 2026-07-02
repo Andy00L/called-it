@@ -62,35 +62,33 @@ export interface SoccerFixtureScore {
   Participant2?: SoccerTotalScore;
 }
 
+/**
+ * Event-specific payload under `Data`. Shape varies by Action (ground truth from
+ * the live devnet feed, not the OpenAPI camelCase schema):
+ * - goal: { GoalType, PlayerId }
+ * - yellow_card: { PlayerId }
+ * - red_card: { PlayerId, Type }        e.g. Type "StraightRed"
+ * - var: { Type }                        e.g. Type "Goal" (what is under review)
+ * - shot: { Outcome }                    e.g. "OffTarget"
+ * - possible: { Corner, Goal, Penalty }  pre-signal booleans
+ * - substitution: { Participant, PlayerInId, PlayerOutId }
+ */
 export interface SoccerData {
-  Action?: string;
-  Goal?: boolean;
   GoalType?: string;
-  Minutes?: number;
   PlayerId?: number;
   PlayerInId?: number;
   PlayerOutId?: number;
-  Penalty?: boolean;
-  YellowCard?: boolean;
-  RedCard?: boolean;
-  VAR?: boolean;
-  Conditions?: unknown[];
-}
-
-export interface SoccerPossibleNeutralEvent {
-  RedCard?: boolean;
-  YellowCard?: boolean;
-  VAR?: boolean;
-}
-
-export interface SoccerPossiblePartiEvent {
+  Participant?: number;
+  Type?: string;
+  Outcome?: string;
+  Corner?: boolean;
   Goal?: boolean;
   Penalty?: boolean;
-  Corner?: boolean;
 }
 
-export interface SoccerPartiState {
-  PossibleEvent?: SoccerPossiblePartiEvent;
+export interface MatchClock {
+  Running: boolean;
+  Seconds: number;
 }
 
 export type SoccerPossessionType =
@@ -99,36 +97,47 @@ export type SoccerPossessionType =
   | 'HighDangerPossession'
   | 'SafePossession';
 
-/** One scores-feed update. Soccer-relevant subset of the Scores schema. */
+/**
+ * One scores-feed record. The live API returns PascalCase keys (the OpenAPI spec
+ * documents camelCase, which does not match reality). `Score` carries the
+ * cumulative per-period state; `Data` carries the event payload.
+ */
 export interface ScoresUpdate {
-  fixtureId: number;
-  gameState?: string;
-  startTime?: number;
-  isTeam?: boolean;
-  fixtureGroupId?: number;
-  competitionId?: number;
-  countryId?: number;
-  sportId?: number;
-  participant1IsHome?: boolean;
-  participant1Id?: number;
-  participant2Id?: number;
-  action?: string;
-  id?: number;
-  ts: number;
-  seq?: number;
-  confirmed?: boolean;
-  statusSoccerId?: number | string;
-  scoreSoccer?: SoccerFixtureScore;
-  dataSoccer?: SoccerData;
-  /** Encoded stat map: key = (period * 1000) + base_key. */
-  stats?: Record<string, number>;
-  participant?: number;
-  possession?: number;
-  possessionType?: SoccerPossessionType;
-  possibleEventSoccer?: SoccerPossibleNeutralEvent;
-  parti1StateSoccer?: SoccerPartiState;
-  parti2StateSoccer?: SoccerPartiState;
-  lineups?: unknown[];
+  FixtureId: number;
+  Ts: number;
+  Seq?: number;
+  Id?: number;
+  /** Sport tag, e.g. "Soccer". */
+  Type?: string;
+  /** snake_case event kind: goal, corner, yellow_card, red_card, var, shot, possible, substitution, ... */
+  Action?: string;
+  GameState?: string;
+  StatusId?: number;
+  /** Only settle on confirmed events (VAR-safe). */
+  Confirmed?: boolean;
+  /** Acting team: 1 or 2. */
+  Participant?: number;
+  Clock?: MatchClock;
+  /** Cumulative score/stat state per period. Primary source of truth for resolution. */
+  Score?: SoccerFixtureScore;
+  Data?: SoccerData;
+  /** Encoded stat map: key = (period * 1000) + base_key. Often empty; prefer Score. */
+  Stats?: Record<string, number>;
+  Possession?: number;
+  PossessionType?: SoccerPossessionType;
+  PossibleEvent?: Record<string, boolean>;
+  Parti1State?: unknown;
+  Parti2State?: unknown;
+  Lineups?: unknown[];
+  CompetitionId?: number;
+  CountryId?: number;
+  SportId?: number;
+  FixtureGroupId?: number;
+  StartTime?: number;
+  IsTeam?: boolean;
+  Participant1Id?: number;
+  Participant2Id?: number;
+  Participant1IsHome?: boolean;
 }
 
 /** Parsed SSE frame before JSON decoding of data. */

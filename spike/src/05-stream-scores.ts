@@ -35,21 +35,17 @@ for await (const message of streamJson<ScoresUpdate>(url, { headers })) {
   const update = message.payload;
   appendFileSync(logFile, `${JSON.stringify(update)}\n`);
 
-  const latencyMs = Date.now() - update.ts;
-  const soccer = update.dataSoccer;
+  const latencyMs = Date.now() - update.Ts;
+  const clock = update.Clock !== undefined ? `${Math.floor(update.Clock.Seconds / 60)}'` : '';
   const flags = [
-    soccer?.Goal === true ? 'GOAL' : '',
-    soccer?.YellowCard === true ? 'YELLOW' : '',
-    soccer?.RedCard === true ? 'RED' : '',
-    soccer?.Penalty === true ? 'PEN' : '',
-    soccer?.VAR === true ? 'VAR' : '',
-    update.possessionType ?? '',
+    update.Confirmed === true ? 'confirmed' : 'unconfirmed',
+    update.PossessionType ?? '',
   ]
     .filter((flag) => flag !== '')
     .join(' ');
 
   console.log(
-    `fixture=${update.fixtureId} action=${update.action ?? '?'} state=${update.gameState ?? '?'} ` +
+    `fixture=${update.FixtureId} ${clock} action=${update.Action ?? '?'} p${update.Participant ?? '-'} ` +
       `latency=${latencyMs}ms ${flags}`,
   );
 }

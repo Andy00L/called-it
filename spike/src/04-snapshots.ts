@@ -65,7 +65,7 @@ if (fixtureIdArg !== undefined) {
     console.log(`  score events: ${scores.value.length}`);
     const last = scores.value.at(-1);
     if (last !== undefined) {
-      console.log(`  last event: action=${last.action ?? '?'} gameState=${last.gameState ?? '?'}`);
+      console.log(`  last event: Action=${last.Action ?? '?'} GameState=${last.GameState ?? '?'}`);
     }
   } else {
     console.error(`  scores/snapshot failed: ${scores.error.message}`);

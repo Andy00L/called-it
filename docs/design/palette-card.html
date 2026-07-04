@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALLED IT palette card</title>
+<!-- Attachment asset for the Claude Design loop: open in a browser at
+     1280px width and screenshot at 2x. Pins palette, material, and type. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --field: #0A0F0B; --surface: #111813; --line: #1E2A21;
+    --ink: #F2F7F3; --ink-muted: #8FA396; --ink-faint: #5C6B60;
+    --accent: #B6FF3B; --accent-deep: #7DB428;
+    --streak: #FFC24B; --miss: #FF5D5D;
+    --paper: #F6F3EA; --paper-ink: #151515;
+  }
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    background: var(--field);
+    background-image: radial-gradient(120% 60% at 50% 0%, rgba(182,255,59,0.05) 0%, rgba(182,255,59,0.015) 38%, transparent 70%);
+    color: var(--ink);
+    font-family: Inter, system-ui, sans-serif;
+    padding: 40px; width: 1280px;
+  }
+  h1 { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 600; letter-spacing: 0.06em; }
+  .sub { color: var(--ink-muted); font-size: 13px; margin-top: 4px; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 28px 0; }
+  .swatch { border-radius: 10px; border: 1px solid var(--line); padding: 12px; height: 92px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .swatch code { font-family: 'JetBrains Mono', monospace; font-size: 11px; display: block; }
+  .swatch .role { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .row { display: flex; gap: 16px; align-items: stretch; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; flex: 1;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 2px 8px rgba(0,0,0,0.40), 0 12px 32px rgba(0,0,0,0.50);
+  }
+  .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .num { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px;
+    background: var(--accent); color: var(--field); font-weight: 600; font-size: 14px; border-radius: 10px; border: 0;
+  }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .pulse { display: flex; height: 8px; border-radius: 10px; overflow: hidden; margin: 10px 0 6px; }
+  .pulse i { display: block; }
+  .badge { display: inline-flex; gap: 6px; align-items: center; border: 1px solid rgba(182,255,59,0.4); background: rgba(182,255,59,0.15); color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 10px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .receipt { background: var(--paper); color: var(--paper-ink); font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 14px 16px; width: 300px; transform: rotate(0.6deg); box-shadow: 0 16px 40px rgba(0,0,0,0.55); }
+  .receipt .rule { border-top: 1px dashed rgba(21,21,21,0.3); margin: 8px 0; }
+  .perf { height: 10px; width: 300px; transform: rotate(0.6deg); background-color: var(--paper); background-image: radial-gradient(circle at 10px 0, var(--field) 4px, transparent 4.5px); background-size: 20px 10px; }
+</style>
+</head>
+<body>
+  <h1>CALLED IT : "Stade de nuit + Receipt"</h1>
+  <p class="sub">Dark only. Field is never flat black (stadium glow above). Inter for UI, JetBrains Mono for every number (tabular). Weight ceiling 600. Sentence case.</p>
+
+  <div class="grid">
+    <div class="swatch" style="background:#0A0F0B"><span class="role">field</span><code>#0A0F0B</code></div>
+    <div class="swatch" style="background:#111813"><span class="role">surface</span><code>#111813</code></div>
+    <div class="swatch" style="background:#1E2A21"><span class="role">line</span><code>#1E2A21</code></div>
+    <div class="swatch" style="background:#B6FF3B;color:#0A0F0B"><span class="role">accent (only interactive color)</span><code>#B6FF3B</code></div>
+    <div class="swatch" style="background:#FFC24B;color:#0A0F0B"><span class="role">streak (reserved, once/screen)</span><code>#FFC24B</code></div>
+    <div class="swatch" style="background:#FF5D5D;color:#0A0F0B"><span class="role">miss / destructive</span><code>#FF5D5D</code></div>
+  </div>
+  <div class="grid" style="grid-template-columns: repeat(3, 1fr); max-width: 640px;">
+    <div class="swatch" style="background:#0A0F0B"><span class="role" style="color:#F2F7F3">ink</span><code style="color:#F2F7F3">#F2F7F3</code></div>
+    <div class="swatch" style="background:#0A0F0B"><span class="role" style="color:#8FA396">ink muted</span><code style="color:#8FA396">#8FA396</code></div>
+    <div class="swatch" style="background:#0A0F0B"><span class="role" style="color:#5C6B60">ink faint (disabled only)</span><code style="color:#5C6B60">#5C6B60</code></div>
+  </div>
+
+  <div class="row">
+    <div class="card" style="max-width: 420px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span class="eyebrow">Open calls</span>
+        <span class="badge"><span class="dot"></span>live 85'</span>
+      </div>
+      <div class="pulse">
+        <i style="flex:12.4; background:var(--accent)"></i>
+        <i style="flex:23.4; background:var(--line)"></i>
+        <i style="flex:64.2; background:var(--ink-muted)"></i>
+      </div>
+      <p class="num" style="font-size:12px; color:var(--ink-muted);">Paraguay <span style="color:var(--accent)">12.4%</span> &nbsp; draw 23.4% &nbsp; France 64.2%</p>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
+        <div>
+          <div style="font-size:14px; font-weight:600;">Corner in the next 10 minutes</div>
+          <div style="font-size:12px; color:var(--ink-muted);">market says <span class="num" style="color:var(--ink)">66.7%</span></div>
+        </div>
+        <div style="text-align:right;">
+          <div class="num" style="color:var(--accent); font-size:20px; font-weight:600;">+150</div>
+          <button class="btn">Lock it</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="perf" style="background-image: radial-gradient(circle at 10px 10px, var(--field) 4px, transparent 4.5px);"></div>
+      <div class="receipt">
+        <div style="display:flex; justify-content:space-between;"><b style="letter-spacing:0.14em;">CALLED IT</b><span style="opacity:0.6">RECEIPT</span></div>
+        <div class="rule"></div>
+        <div><b>Corner in the next 10 minutes</b></div>
+        <div style="opacity:0.6">Paraguay vs France (World Cup)</div>
+        <div class="num">locked 85' at 66.7% by smoke-e2e</div>
+        <div class="rule"></div>
+        <div class="num" style="display:flex; justify-content:space-between;"><span style="opacity:0.6">RESULT</span><b>HIT +150 pts</b></div>
+        <div class="rule"></div>
+        <div style="opacity:0.6">PROOF</div>
+        <div class="num">root d24e38f9...e6821875</div>
+        <div class="num">solana memo tx 5PpiUYU6...DpqsQM</div>
+        <div>proof check: <b>root recomputed, VALID</b></div>
+        <div class="rule"></div>
+        <div style="text-align:center; letter-spacing:0.14em; opacity:0.6">ANCHORED ON SOLANA</div>
+      </div>
+      <div class="perf"></div>
+    </div>
+    <div class="card" style="max-width: 220px;">
+      <span class="eyebrow">Buttons</span>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
+        <button class="btn">Lock it</button>
+        <button class="btn ghost">Retry</button>
+        <span class="badge" style="border-color:rgba(255,194,75,0.4); background:rgba(255,194,75,0.15); color:var(--streak);">Streak x3</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

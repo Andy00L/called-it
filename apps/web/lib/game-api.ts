@@ -1,4 +1,4 @@
-import type { GuestSession, LockResult } from '@calledit/contracts';
+import type { GuestSession, LockResult, ProfilePayload } from '@calledit/contracts';
 import { workerUrl } from './api';
 
 /** Client for the game routes. Every failure mode is distinct and typed. */
@@ -68,6 +68,30 @@ export async function lockPick(
     // fall through: non-JSON error body maps to the generic reason below
   }
   return { ok: false, reason: 'server' };
+}
+
+export type ProfileOutcome =
+  | { ok: true; profile: ProfilePayload }
+  | { ok: false; reason: 'unknown_player' | 'network' | 'server' };
+
+export async function getProfile(playerId: string): Promise<ProfileOutcome> {
+  let response: Response;
+  try {
+    response = await fetch(`${workerUrl()}/profile/${playerId}`, { cache: 'no-store' });
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+  if (response.status === 404) {
+    return { ok: false, reason: 'unknown_player' };
+  }
+  if (!response.ok) {
+    return { ok: false, reason: 'server' };
+  }
+  try {
+    return { ok: true, profile: (await response.json()) as ProfilePayload };
+  } catch {
+    return { ok: false, reason: 'server' };
+  }
 }
 
 /** Player-facing copy per failure mode (distinct, actionable). */

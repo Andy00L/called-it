@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { CallOption, GuestSession, PickRecord } from '@calledit/contracts';
 import { useLiveMatch } from '../../lib/use-live-match';
 import { ensureGuestSession, clearStoredSession } from '../../lib/player';
@@ -130,6 +131,13 @@ export function LiveMatch({
     }))
     .filter((row) => row.settlement !== undefined);
 
+  // Streak comes straight off the settlement stream; no profile fetch needed.
+  const latestMySettlement = settledMine
+    .map((row) => row.settlement)
+    .filter((notice) => notice !== undefined)
+    .at(-1);
+  const currentStreak = latestMySettlement?.newStreak ?? 0;
+
   return (
     <div className="flex flex-col gap-6">
       {connection === 'lost' ? (
@@ -179,13 +187,21 @@ export function LiveMatch({
           </div>
         )}
         {session !== null ? (
-          <p className="text-xs text-ink-faint">playing as {session.handle}</p>
+          <p className="text-xs text-ink-faint">
+            playing as{' '}
+            <Link href="/profile" className="underline decoration-line hover:text-ink-muted">
+              {session.handle}
+            </Link>
+          </p>
         ) : null}
       </section>
 
       {settledMine.length > 0 ? (
         <section className="flex flex-col gap-3" aria-live="polite">
-          <h2 className="text-xs uppercase tracking-[0.08em] text-ink-muted">Your results</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs uppercase tracking-[0.08em] text-ink-muted">Your results</h2>
+            {currentStreak > 1 ? <Badge tone="streak">Streak x{currentStreak}</Badge> : null}
+          </div>
           <ul className="flex flex-col gap-2">
             {settledMine.map(({ entry, settlement }) => (
               <li key={entry.pick.id} className="flex items-center justify-between gap-3 text-sm">

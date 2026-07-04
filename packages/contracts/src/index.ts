@@ -99,6 +99,8 @@ export interface SettlementNotice {
   pick: PickRecord;
   outcome: 'hit' | 'miss';
   pointsAwarded: number;
+  /** The player's streak after this settlement; always 0 for ghost picks. */
+  newStreak: number;
 }
 
 /** One row of GET /leaderboard. */

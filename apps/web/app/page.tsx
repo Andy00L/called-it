@@ -32,12 +32,20 @@ export default async function LobbyPage() {
             Call the match before it happens. The market sets the price.
           </p>
         </div>
-        <Link
-          href="/leaderboard"
-          className="shrink-0 text-sm text-ink-muted transition-colors duration-[var(--duration-small)] hover:text-ink"
-        >
-          Leaderboard
-        </Link>
+        <div className="flex shrink-0 gap-4">
+          <Link
+            href="/leaderboard"
+            className="text-sm text-ink-muted transition-colors duration-[var(--duration-small)] hover:text-ink"
+          >
+            Leaderboard
+          </Link>
+          <Link
+            href="/profile"
+            className="text-sm text-ink-muted transition-colors duration-[var(--duration-small)] hover:text-ink"
+          >
+            Profile
+          </Link>
+        </div>
       </header>
 
       {!result.ok ? (

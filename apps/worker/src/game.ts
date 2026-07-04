@@ -193,7 +193,7 @@ export function createGameService(deps: GameServiceDeps): GameService {
     // Either settled or provably not pending anymore: drop from the cache.
     pendingByFixture.get(pick.fixtureId)?.delete(pick.id);
     if (settled.ok) {
-      deps.onSettlement?.({ fixtureId: pick.fixtureId, pick, outcome, pointsAwarded });
+      deps.onSettlement?.({ fixtureId: pick.fixtureId, pick, outcome, pointsAwarded, newStreak });
     }
   };
 

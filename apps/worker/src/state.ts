@@ -6,6 +6,7 @@ import {
   type MatchResultProbabilities,
 } from '@calledit/engine';
 import type { OddsPayload, ScoresUpdate, SoccerFixtureScore } from '@calledit/txline';
+import type { MatchPhase } from '@calledit/contracts';
 
 /**
  * In-memory live state per fixture, reduced from the two streams. Restart
@@ -15,8 +16,9 @@ import type { OddsPayload, ScoresUpdate, SoccerFixtureScore } from '@calledit/tx
  */
 
 // Phase is derived from actions and the clock. GameState is unreliable and
-// the StatusId enum is undocumented (docs/FEEDBACK.md, findings 5).
-export type MatchPhase = 'pre' | 'live' | 'finished';
+// the StatusId enum is undocumented (docs/FEEDBACK.md, findings 5). The union
+// itself lives in the wire contract shared with the web app.
+export type { MatchPhase };
 
 // Feed action marking the end of a match (action vocabulary observed live,
 // see docs/FEEDBACK.md confirmed schema notes).

@@ -7,9 +7,10 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts"
+    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts src/fixtures.test.ts"
   },
   "dependencies": {
+    "@calledit/contracts": "workspace:*",
     "@calledit/engine": "workspace:*",
     "@calledit/txline": "workspace:*",
     "@supabase/supabase-js": "^2.110.0",

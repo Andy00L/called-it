@@ -8,6 +8,8 @@
 // sort per snapshot stays trivial (product choice, v1).
 const DEFAULT_LATENCY_WINDOW = 200;
 
+import type { LatencySnapshot } from '@calledit/contracts';
+
 export interface LatencyTracker {
   windowSize: number;
   samplesMs: number[];
@@ -15,12 +17,7 @@ export interface LatencyTracker {
   lastMs: number | null;
 }
 
-export interface LatencySnapshot {
-  lastMs: number;
-  p50Ms: number;
-  p95Ms: number;
-  sampleCount: number;
-}
+export type { LatencySnapshot };
 
 export function createLatencyTracker(windowSize: number = DEFAULT_LATENCY_WINDOW): LatencyTracker {
   return { windowSize: Math.max(1, Math.floor(windowSize)), samplesMs: [], nextIndex: 0, lastMs: null };

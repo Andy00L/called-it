@@ -1,18 +1,8 @@
 import type { IncomingMessage } from 'node:http';
-import {
-  generateCalls,
-  pickBookieDeck,
-  type CallOption,
-  type MatchEvent,
-  type MatchResultProbabilities,
-} from '@calledit/engine';
+import { generateCalls, pickBookieDeck, readStat } from '@calledit/engine';
+import type { LivePayload } from '@calledit/contracts';
 import { appendTapeEntry, openTapeDeck } from './tape.js';
-import {
-  createLatencyTracker,
-  recordLatency,
-  snapshotLatency,
-  type LatencySnapshot,
-} from './latency.js';
+import { createLatencyTracker, recordLatency, snapshotLatency } from './latency.js';
 import {
   applyOddsPayload,
   applyScoresUpdate,
@@ -20,10 +10,10 @@ import {
   getMatchState,
   isInRunning,
   listMatchStates,
-  type MatchPhase,
 } from './state.js';
 import { createFanout, type ApiResult } from './fanout.js';
-import { runIngest } from './ingest.js';
+import { createSharedAuth, runIngest } from './ingest.js';
+import { createFixtureCatalog, summarizeFixtures } from './fixtures.js';
 import { readWorkerEnv } from './env.js';
 import { createGameService, type GameService } from './game.js';
 import { createMemoryPersistence } from './persistence-memory.js';
@@ -31,22 +21,6 @@ import { createSupabasePersistence } from './persistence-supabase.js';
 
 // Events included in live payloads; the full timeline stays in the tape.
 const LIVE_PAYLOAD_EVENT_LIMIT = 50;
-
-/** Shape served on /live/:fixtureId and consumed by the web app. */
-export interface LivePayload {
-  fixtureId: number;
-  phase: MatchPhase;
-  clockSeconds: number;
-  clockRunning: boolean;
-  score: unknown;
-  matchResult: MatchResultProbabilities | null;
-  eventCount: number;
-  recentEvents: MatchEvent[];
-  catalog: CallOption[];
-  bookieDeck: CallOption[];
-  latency: { scores: LatencySnapshot | null; odds: LatencySnapshot | null };
-  updatedAtMs: number;
-}
 
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -166,6 +140,9 @@ async function main(): Promise<void> {
   const startedAtMs = Date.now();
   const lastHeartbeatMs: Record<'scores' | 'odds', number> = { scores: 0, odds: 0 };
 
+  const sharedAuth = createSharedAuth({ jwt: env.jwt, apiToken: env.apiToken });
+  const fixtureCatalog = createFixtureCatalog(env.cfg, sharedAuth);
+
   const buildLivePayload = (fixtureId: number): LivePayload | null => {
     const state = getMatchState(store, fixtureId);
     if (state === undefined) {
@@ -182,6 +159,8 @@ async function main(): Promise<void> {
       phase: state.phase,
       clockSeconds: state.clockSeconds,
       clockRunning: state.clockRunning,
+      goalsP1: readStat(state.score, 'goals', 'p1'),
+      goalsP2: readStat(state.score, 'goals', 'p2'),
       score: state.score,
       matchResult: state.matchResult,
       eventCount: state.events.length,
@@ -204,6 +183,8 @@ async function main(): Promise<void> {
   const fanout = createFanout({
     buildLivePayload,
     buildStatePayload: (fixtureId) => getMatchState(store, fixtureId) ?? null,
+    buildFixturesPayload: () =>
+      summarizeFixtures(fixtureCatalog.listFixtures(), listMatchStates(store)),
     buildHealthPayload: () => ({
       ok: true,
       network: env.cfg.network,
@@ -220,6 +201,10 @@ async function main(): Promise<void> {
 
   await game.hydratePendingPicks();
 
+  // First fill before serving; failures tolerated (lobby then shows ids only).
+  await fixtureCatalog.refresh();
+  fixtureCatalog.start();
+
   const abortController = new AbortController();
 
   const triggerResolution = (fixtureId: number): void => {
@@ -231,7 +216,7 @@ async function main(): Promise<void> {
 
   const ingestPromise = runIngest(
     env.cfg,
-    { jwt: env.jwt, apiToken: env.apiToken },
+    sharedAuth,
     {
       onScoresUpdate: (update, receivedAtMs) => {
         const taped = appendTapeEntry(tapeDeck, update.FixtureId, {
@@ -277,6 +262,7 @@ async function main(): Promise<void> {
   const shutdown = (signalName: string): void => {
     console.log(`[shutdown] ${signalName} received, stopping`);
     abortController.abort();
+    fixtureCatalog.stop();
     fanout.close();
     void ingestPromise.then(() => {
       console.log('[shutdown] ingest stopped, bye');

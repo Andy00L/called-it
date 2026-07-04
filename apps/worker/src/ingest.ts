@@ -38,13 +38,21 @@ export interface IngestHooks {
   onHeartbeat(stream: TapeStream, receivedAtMs: number): void;
 }
 
-interface SharedAuth {
+/**
+ * Rotating auth shared by every TxLINE consumer in the process (both stream
+ * loops and the fixture catalog), so a JWT refresh in one place serves all.
+ */
+export interface SharedAuth {
   current: IngestAuthState;
   refreshInFlight: Promise<boolean> | null;
 }
 
-/** Re-acquire the guest JWT once, shared across both stream loops. */
-async function refreshGuestJwt(cfg: TxlineNetworkConfig, shared: SharedAuth): Promise<boolean> {
+export function createSharedAuth(auth: IngestAuthState): SharedAuth {
+  return { current: auth, refreshInFlight: null };
+}
+
+/** Re-acquire the guest JWT once, shared across all consumers. */
+export async function refreshGuestJwt(cfg: TxlineNetworkConfig, shared: SharedAuth): Promise<boolean> {
   if (shared.refreshInFlight === null) {
     shared.refreshInFlight = (async () => {
       const session = await startGuestSession(cfg);
@@ -157,11 +165,10 @@ async function runStreamIngest<TPayload>(
 /** Run both stream loops until the signal aborts. */
 export async function runIngest(
   cfg: TxlineNetworkConfig,
-  auth: IngestAuthState,
+  shared: SharedAuth,
   hooks: IngestHooks,
   signal: AbortSignal,
 ): Promise<void> {
-  const shared: SharedAuth = { current: auth, refreshInFlight: null };
   await Promise.all([
     runStreamIngest<ScoresUpdate>(
       'scores',

@@ -28,6 +28,8 @@ export interface FanoutDeps {
   buildLivePayload(fixtureId: number): unknown | null;
   buildStatePayload(fixtureId: number): unknown | null;
   buildHealthPayload(): unknown;
+  /** Lobby listing: fixture metadata merged with live state summaries. */
+  buildFixturesPayload(): unknown;
   /** Game API routes; returns null when the path is not an API route. */
   handleApiRequest(
     method: string,
@@ -163,6 +165,10 @@ export function createFanout(deps: FanoutDeps): Fanout {
       sendJson(response, 200, deps.buildHealthPayload());
       return;
     }
+    if (method === 'GET' && segments.length === 1 && segments[0] === 'fixtures') {
+      sendJson(response, 200, deps.buildFixturesPayload());
+      return;
+    }
     if (
       method === 'GET' &&
       segments.length === 2 &&
@@ -187,7 +193,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
     sendJson(response, 404, {
       error:
-        'unknown route; use /health, /state/:fixtureId, /live/:fixtureId, /leaderboard, /profile/:playerId, POST /players/guest, POST /picks',
+        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /profile/:playerId, POST /players/guest, POST /picks',
     });
   };
 

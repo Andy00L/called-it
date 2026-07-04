@@ -1,7 +1,8 @@
-import { err, ok, type Result } from '@calledit/txline';
+import { err, ok } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  type CommitmentRecord,
   type FixtureLeaderboardEntry,
   type LeaderboardEntry,
   type PersistencePort,
@@ -10,6 +11,7 @@ import {
   type SettledPickView,
   type SettlementInput,
 } from './persistence.js';
+import type { MerkleProofStep } from '@calledit/contracts';
 
 /**
  * In-memory adapter: backs the test suite and keeps the worker fully
@@ -23,10 +25,18 @@ interface SettlementRow {
   pointsAwarded: number;
 }
 
+interface PickCommitmentLink {
+  commitmentId: string;
+  leafIndex: number;
+  proof: MerkleProofStep[];
+}
+
 export function createMemoryPersistence(): PersistencePort {
   const players = new Map<string, PlayerRecord>();
   const picks = new Map<string, PickRecord>();
   const settlements = new Map<string, SettlementRow>();
+  const commitments = new Map<string, CommitmentRecord>();
+  const commitmentLinksByPickId = new Map<string, PickCommitmentLink>();
 
   const hasPendingInCategory = (candidate: PickRecord): boolean => {
     for (const existing of picks.values()) {
@@ -162,6 +172,47 @@ export function createMemoryPersistence(): PersistencePort {
         }
       }
       return ok(views);
+    },
+
+    listUncommittedPicks: async () =>
+      ok(
+        [...picks.values()]
+          .filter((pick) => !commitmentLinksByPickId.has(pick.id))
+          .sort((left, right) => left.lockedAtMs - right.lockedAtMs || left.id.localeCompare(right.id)),
+      ),
+
+    recordCommitment: async (commitment, assignments) => {
+      commitments.set(commitment.id, { ...commitment });
+      for (const assignment of assignments) {
+        commitmentLinksByPickId.set(assignment.pickId, {
+          commitmentId: commitment.id,
+          leafIndex: assignment.leafIndex,
+          proof: assignment.proof.map((step) => ({ ...step })),
+        });
+      }
+      return ok(undefined);
+    },
+
+    getReceipt: async (pickId) => {
+      const pick = picks.get(pickId);
+      if (pick === undefined) {
+        return ok(null);
+      }
+      const settlement = settlements.get(pickId);
+      const link = commitmentLinksByPickId.get(pickId);
+      const commitment = link === undefined ? undefined : commitments.get(link.commitmentId);
+      const player = pick.playerId === null ? undefined : players.get(pick.playerId);
+      return ok({
+        pick: { ...pick },
+        playerHandle: player?.handle ?? null,
+        settlement:
+          settlement === undefined
+            ? null
+            : { outcome: settlement.outcome, pointsAwarded: settlement.pointsAwarded },
+        commitment: commitment === undefined ? null : { ...commitment },
+        leafIndex: link?.leafIndex ?? null,
+        proof: link?.proof ?? null,
+      });
     },
 
     listSettledBookiePicksAgainstPlayer: async (playerId) => {

@@ -83,6 +83,23 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Receipt perforation (signature element 2, sheet): punched semicircles
+ * showing the dark field through the paper edge, like a thermal ticket.
+ */
+.receipt-perforation-top {
+  height: 10px;
+  background-color: var(--paper);
+  background-image: radial-gradient(circle at 10px 0, var(--field) 4px, transparent 4.5px);
+  background-size: 20px 10px;
+}
+.receipt-perforation-bottom {
+  height: 10px;
+  background-color: var(--paper);
+  background-image: radial-gradient(circle at 10px 10px, var(--field) 4px, transparent 4.5px);
+  background-size: 20px 10px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

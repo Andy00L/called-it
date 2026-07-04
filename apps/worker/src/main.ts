@@ -1,7 +1,14 @@
 import type { IncomingMessage } from 'node:http';
 import { generateCalls, pickBookieDeck, readStat } from '@calledit/engine';
-import type { LivePayload } from '@calledit/contracts';
+import type { LivePayload, ReceiptPayload } from '@calledit/contracts';
+import { ok, type Result } from '@calledit/txline';
 import { appendTapeEntry, openTapeDeck } from './tape.js';
+import {
+  createCommitmentBatcher,
+  hashPickLeaf,
+  verifyMerkleProof,
+} from './commitments.js';
+import { createMemoPoster } from './memo-poster.js';
 import { createLatencyTracker, recordLatency, snapshotLatency } from './latency.js';
 import {
   applyOddsPayload,
@@ -47,13 +54,28 @@ function statusForGameError(code: string): number {
   return 500;
 }
 
-function buildApiHandler(game: GameService) {
+interface ReceiptSource {
+  buildReceipt(pickId: string): Promise<Result<ReceiptPayload | null, string>>;
+}
+
+function buildApiHandler(game: GameService, receipts: ReceiptSource) {
   return async (
     method: string,
     segments: string[],
     body: unknown,
     headers: IncomingMessage['headers'],
   ): Promise<ApiResult | null> => {
+    if (method === 'GET' && segments.length === 2 && segments[0] === 'receipts') {
+      const receipt = await receipts.buildReceipt(segments[1] ?? '');
+      if (!receipt.ok) {
+        return { status: 500, body: { error: receipt.error } };
+      }
+      if (receipt.value === null) {
+        return { status: 404, body: { error: 'unknown_pick' } };
+      }
+      return { status: 200, body: receipt.value };
+    }
+
     if (method === 'POST' && segments.length === 2 && segments[0] === 'players' && segments[1] === 'guest') {
       const created = await game.createGuestPlayer(asRecord(body)['handle']);
       if (!created.ok) {
@@ -180,6 +202,60 @@ async function main(): Promise<void> {
     },
   });
 
+  const buildReceipt = async (pickId: string): Promise<Result<ReceiptPayload | null, string>> => {
+    const fetched = await persistence.getReceipt(pickId);
+    if (!fetched.ok) {
+      return fetched;
+    }
+    if (fetched.value === null) {
+      return ok(null);
+    }
+    const record = fetched.value;
+    const fixture = fixtureCatalog
+      .listFixtures()
+      .find((candidate) => candidate.FixtureId === record.pick.fixtureId);
+    const leafHashHex = hashPickLeaf(record.pick);
+    const hasProof =
+      record.commitment !== null && record.proof !== null && record.leafIndex !== null;
+    return ok({
+      pick: record.pick,
+      playerHandle: record.playerHandle,
+      settlement: record.settlement,
+      commitment:
+        record.commitment === null || record.proof === null || record.leafIndex === null
+          ? null
+          : {
+              commitmentId: record.commitment.id,
+              rootHashHex: record.commitment.rootHashHex,
+              memoTxSig: record.commitment.memoTxSig,
+              leafIndex: record.leafIndex,
+              leafHashHex,
+              proof: record.proof,
+              pickCount: record.commitment.pickCount,
+              committedAtMs: record.commitment.createdAtMs,
+            },
+      proofValid: hasProof
+        ? verifyMerkleProof(leafHashHex, record.proof ?? [], record.commitment?.rootHashHex ?? '')
+        : null,
+      fixture:
+        fixture === undefined
+          ? null
+          : {
+              participant1: fixture.Participant1,
+              participant2: fixture.Participant2,
+              competition: fixture.Competition,
+            },
+      network: env.cfg.network,
+    });
+  };
+
+  const postMemo =
+    env.walletSecret === undefined ? undefined : createMemoPoster(env.rpcUrl, env.walletSecret);
+  if (postMemo === undefined) {
+    console.warn('[main] no wallet configured: on-chain commitments are OFF');
+  }
+  const commitmentBatcher = createCommitmentBatcher({ persistence, postMemo });
+
   const fanout = createFanout({
     buildLivePayload,
     buildStatePayload: (fixtureId) => getMatchState(store, fixtureId) ?? null,
@@ -196,7 +272,7 @@ async function main(): Promise<void> {
       lastHeartbeatMs,
       latency: { scores: snapshotLatency(scoresLatency), odds: snapshotLatency(oddsLatency) },
     }),
-    handleApiRequest: buildApiHandler(game),
+    handleApiRequest: buildApiHandler(game, { buildReceipt }),
   });
 
   await game.hydratePendingPicks();
@@ -204,6 +280,10 @@ async function main(): Promise<void> {
   // First fill before serving; failures tolerated (lobby then shows ids only).
   await fixtureCatalog.refresh();
   fixtureCatalog.start();
+
+  // Catch up on any picks locked while the worker was down, then batch on.
+  await commitmentBatcher.runOnce();
+  commitmentBatcher.start();
 
   const abortController = new AbortController();
 
@@ -262,6 +342,7 @@ async function main(): Promise<void> {
   const shutdown = (signalName: string): void => {
     console.log(`[shutdown] ${signalName} received, stopping`);
     abortController.abort();
+    commitmentBatcher.stop();
     fixtureCatalog.stop();
     fanout.close();
     void ingestPromise.then(() => {

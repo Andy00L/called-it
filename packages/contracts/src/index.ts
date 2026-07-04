@@ -133,6 +133,37 @@ export interface ProfilePayload {
   bookie: BookieMargin;
 }
 
+/** One step of a Merkle inclusion proof (sha256, hex encoded). */
+export interface MerkleProofStep {
+  siblingHashHex: string;
+  isRightSibling: boolean;
+}
+
+/** On-chain commitment data attached to one pick. */
+export interface PickCommitment {
+  commitmentId: string;
+  rootHashHex: string;
+  /** Solana Memo transaction carrying the root; null until posted. */
+  memoTxSig: string | null;
+  leafIndex: number;
+  leafHashHex: string;
+  proof: MerkleProofStep[];
+  pickCount: number;
+  committedAtMs: number;
+}
+
+/** GET /receipts/:pickId response: everything the public receipt shows. */
+export interface ReceiptPayload {
+  pick: PickRecord;
+  playerHandle: string | null;
+  settlement: { outcome: 'hit' | 'miss'; pointsAwarded: number } | null;
+  commitment: PickCommitment | null;
+  /** Worker-side re-verification: leaf + proof recomputes the root. */
+  proofValid: boolean | null;
+  fixture: { participant1: string; participant2: string; competition: string } | null;
+  network: 'mainnet' | 'devnet';
+}
+
 export type {
   BookieMargin,
   CalibrationBucket,

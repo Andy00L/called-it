@@ -205,7 +205,12 @@ export function LiveMatch({
           <ul className="flex flex-col gap-2">
             {settledMine.map(({ entry, settlement }) => (
               <li key={entry.pick.id} className="flex items-center justify-between gap-3 text-sm">
-                <span className="truncate">{entry.pick.claim}</span>
+                <Link
+                  href={`/r/${entry.pick.id}`}
+                  className="truncate underline decoration-line underline-offset-2 hover:text-ink"
+                >
+                  {entry.pick.claim}
+                </Link>
                 {settlement?.outcome === 'hit' ? (
                   <span className="flex items-center gap-2">
                     <Badge tone="live">Called it</Badge>

@@ -1,9 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { CallCategory, CallPredicate } from '@calledit/engine';
+import type { CallCategory, CallPredicate, MerkleProofStep } from '@calledit/contracts';
 import { err, ok, type Result } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  type CommitmentRecord,
   type FixtureLeaderboardEntry,
   type LeaderboardEntry,
   type PersistencePort,
@@ -48,6 +49,27 @@ interface PickRow {
   is_bookie: boolean;
   bookie_of_pick_id: string | null;
   status: PickStatus;
+  commitment_id: string | null;
+  leaf_index: number | null;
+  merkle_proof: MerkleProofStep[] | null;
+}
+
+interface CommitmentRow {
+  id: string;
+  root_hash: string;
+  memo_tx_sig: string | null;
+  pick_count: number;
+  created_at: string;
+}
+
+function commitmentFromRow(row: CommitmentRow): CommitmentRecord {
+  return {
+    id: row.id,
+    rootHashHex: row.root_hash,
+    memoTxSig: row.memo_tx_sig,
+    pickCount: row.pick_count,
+    createdAtMs: Date.parse(row.created_at),
+  };
 }
 
 interface SettlementRow {
@@ -87,7 +109,8 @@ function pickFromRow(row: PickRow): PickRecord {
   };
 }
 
-function pickToRow(pick: PickRecord): PickRow {
+/** Insert shape: commitment columns are filled later by the batcher. */
+function pickToRow(pick: PickRecord): Omit<PickRow, 'commitment_id' | 'leaf_index' | 'merkle_proof'> {
   return {
     id: pick.id,
     player_id: pick.playerId,
@@ -278,6 +301,110 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
         return settlements;
       }
       return ok(buildSettledViews(pickRows, settlements.value));
+    },
+
+    listUncommittedPicks: async () => {
+      const { data, error } = await client
+        .from('picks')
+        .select('*')
+        .is('commitment_id', null)
+        .order('locked_at', { ascending: true })
+        .order('id', { ascending: true });
+      if (error !== null) {
+        return err(`uncommitted picks select failed: ${error.message}`);
+      }
+      return ok(((data ?? []) as PickRow[]).map(pickFromRow));
+    },
+
+    recordCommitment: async (commitment, assignments) => {
+      const { error: insertError } = await client.from('commitments').insert({
+        id: commitment.id,
+        root_hash: commitment.rootHashHex,
+        memo_tx_sig: commitment.memoTxSig,
+        pick_count: commitment.pickCount,
+        created_at: new Date(commitment.createdAtMs).toISOString(),
+      });
+      if (insertError !== null) {
+        return err(`commitments insert failed: ${insertError.message}`);
+      }
+      // Per-pick proofs differ, so this is one update per pick; batches stay
+      // small (picks locked in the last interval).
+      for (const assignment of assignments) {
+        const { error: updateError } = await client
+          .from('picks')
+          .update({
+            commitment_id: commitment.id,
+            leaf_index: assignment.leafIndex,
+            merkle_proof: assignment.proof,
+          })
+          .eq('id', assignment.pickId);
+        if (updateError !== null) {
+          return err(`pick ${assignment.pickId} commitment update failed: ${updateError.message}`);
+        }
+      }
+      return ok(undefined);
+    },
+
+    getReceipt: async (pickId) => {
+      const pickResult = await client.from('picks').select('*').eq('id', pickId).maybeSingle();
+      if (pickResult.error !== null) {
+        return err(`receipt pick select failed: ${pickResult.error.message}`);
+      }
+      if (pickResult.data === null) {
+        return ok(null);
+      }
+      const pickRow = pickResult.data as PickRow;
+
+      const settlementResult = await client
+        .from('settlements')
+        .select('pick_id, outcome, points_awarded')
+        .eq('pick_id', pickId)
+        .maybeSingle();
+      if (settlementResult.error !== null) {
+        return err(`receipt settlement select failed: ${settlementResult.error.message}`);
+      }
+      const settlementRow = settlementResult.data as SettlementRow | null;
+
+      let commitment: CommitmentRecord | null = null;
+      if (pickRow.commitment_id !== null) {
+        const commitmentResult = await client
+          .from('commitments')
+          .select('*')
+          .eq('id', pickRow.commitment_id)
+          .maybeSingle();
+        if (commitmentResult.error !== null) {
+          return err(`receipt commitment select failed: ${commitmentResult.error.message}`);
+        }
+        commitment =
+          commitmentResult.data === null
+            ? null
+            : commitmentFromRow(commitmentResult.data as CommitmentRow);
+      }
+
+      let playerHandle: string | null = null;
+      if (pickRow.player_id !== null) {
+        const playerResult = await client
+          .from('players')
+          .select('handle')
+          .eq('id', pickRow.player_id)
+          .maybeSingle();
+        if (playerResult.error !== null) {
+          return err(`receipt player select failed: ${playerResult.error.message}`);
+        }
+        playerHandle = (playerResult.data as { handle: string } | null)?.handle ?? null;
+      }
+
+      return ok({
+        pick: pickFromRow(pickRow),
+        playerHandle,
+        settlement:
+          settlementRow === null
+            ? null
+            : { outcome: settlementRow.outcome, pointsAwarded: settlementRow.points_awarded },
+        commitment,
+        leafIndex: pickRow.leaf_index,
+        proof: pickRow.merkle_proof,
+      });
     },
 
     listSettledBookiePicksAgainstPlayer: async (playerId) => {

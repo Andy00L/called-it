@@ -193,7 +193,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
     sendJson(response, 404, {
       error:
-        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /profile/:playerId, POST /players/guest, POST /picks',
+        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /profile/:playerId, /receipts/:pickId, POST /players/guest, POST /picks',
     });
   };
 

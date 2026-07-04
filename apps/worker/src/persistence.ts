@@ -2,6 +2,7 @@ import type { Result } from '@calledit/txline';
 import type {
   FixtureLeaderboardEntry,
   LeaderboardEntry,
+  MerkleProofStep,
   PickRecord,
   PickStatus,
 } from '@calledit/contracts';
@@ -48,6 +49,32 @@ export interface SettledPickView {
   fixtureId: number;
 }
 
+/** One commitment batch as persisted (commitments table). */
+export interface CommitmentRecord {
+  id: string;
+  rootHashHex: string;
+  memoTxSig: string | null;
+  pickCount: number;
+  createdAtMs: number;
+}
+
+/** Per-pick assignment written alongside a commitment batch. */
+export interface CommitmentAssignment {
+  pickId: string;
+  leafIndex: number;
+  proof: MerkleProofStep[];
+}
+
+/** Raw receipt data joined by the adapter; enrichment happens in main. */
+export interface ReceiptRecord {
+  pick: PickRecord;
+  playerHandle: string | null;
+  settlement: { outcome: 'hit' | 'miss'; pointsAwarded: number } | null;
+  commitment: CommitmentRecord | null;
+  leafIndex: number | null;
+  proof: MerkleProofStep[] | null;
+}
+
 // Stable error codes adapters prefix their error strings with.
 export const PERSISTENCE_ERROR_DUPLICATE_CATEGORY = 'duplicate_category';
 export const PERSISTENCE_ERROR_NOT_PENDING = 'not_pending';
@@ -74,4 +101,13 @@ export interface PersistencePort {
   listSettledBookiePicksAgainstPlayer(
     playerId: string,
   ): Promise<Result<SettledPickView[], string>>;
+  /** Picks not yet included in any commitment batch, oldest lock first. */
+  listUncommittedPicks(): Promise<Result<PickRecord[], string>>;
+  /** Write one commitment batch and attach proof paths to its picks. */
+  recordCommitment(
+    commitment: CommitmentRecord,
+    assignments: readonly CommitmentAssignment[],
+  ): Promise<Result<void, string>>;
+  /** Everything the public receipt needs; null when the pick is unknown. */
+  getReceipt(pickId: string): Promise<Result<ReceiptRecord | null, string>>;
 }

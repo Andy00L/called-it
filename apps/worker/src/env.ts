@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import {
@@ -25,6 +26,43 @@ export interface WorkerEnv {
   /** Both present = durable persistence; both absent = memory fallback. */
   supabaseUrl: string | undefined;
   supabaseSecretKey: string | undefined;
+  /** RPC endpoint for on-chain commitment posting. */
+  rpcUrl: string;
+  /** Wallet secret key bytes; undefined = commitments disabled. */
+  walletSecret: Uint8Array | undefined;
+}
+
+/**
+ * Wallet resolution: WALLET_SECRET_KEY (JSON array string, for Railway) wins
+ * over WALLET_KEYPAIR_PATH (local file). Neither = commitments stay off.
+ */
+function readWalletSecret(): Result<Uint8Array | undefined, string> {
+  const inlineSecret = emptyToUndefined(process.env['WALLET_SECRET_KEY']);
+  const keypairPath = emptyToUndefined(process.env['WALLET_KEYPAIR_PATH']);
+  let rawJson: string | undefined;
+  if (inlineSecret !== undefined) {
+    rawJson = inlineSecret;
+  } else if (keypairPath !== undefined) {
+    const resolvedPath = resolve(import.meta.dirname, '../../..', keypairPath);
+    if (!existsSync(resolvedPath)) {
+      // A configured path that does not exist is a warning, not a crash: the
+      // Railway image ships without wallet.json on purpose.
+      console.warn(`[readWalletSecret] keypair file absent (${resolvedPath}), commitments off`);
+      return ok(undefined);
+    }
+    rawJson = readFileSync(resolvedPath, 'utf8');
+  } else {
+    return ok(undefined);
+  }
+  try {
+    const parsed = JSON.parse(rawJson) as number[];
+    if (!Array.isArray(parsed) || parsed.length !== 64) {
+      return err('wallet secret must be a JSON array of 64 bytes');
+    }
+    return ok(Uint8Array.from(parsed));
+  } catch {
+    return err('wallet secret is not valid JSON');
+  }
 }
 
 function emptyToUndefined(value: string | undefined): string | undefined {
@@ -72,5 +110,28 @@ export function readWorkerEnv(): Result<WorkerEnv, string> {
     );
   }
 
-  return ok({ cfg, jwt, apiToken, port, tapesDirectory, supabaseUrl, supabaseSecretKey });
+  // Network-specific RPC wins, then the generic override, then the public RPC.
+  const rpcUrl =
+    emptyToUndefined(
+      process.env[rawNetwork === 'mainnet' ? 'SOLANA_RPC_URL_MAINNET' : 'SOLANA_RPC_URL_DEVNET'],
+    ) ??
+    emptyToUndefined(process.env['SOLANA_RPC_URL']) ??
+    cfg.defaultRpcUrl;
+
+  const walletSecret = readWalletSecret();
+  if (!walletSecret.ok) {
+    return walletSecret;
+  }
+
+  return ok({
+    cfg,
+    jwt,
+    apiToken,
+    port,
+    tapesDirectory,
+    supabaseUrl,
+    supabaseSecretKey,
+    rpcUrl,
+    walletSecret: walletSecret.value,
+  });
 }

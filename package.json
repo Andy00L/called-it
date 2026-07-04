@@ -2,6 +2,9 @@
   "name": "calledit",
   "private": true,
   "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "typecheck": "pnpm -r run typecheck"
   }

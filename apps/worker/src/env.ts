@@ -49,10 +49,12 @@ export function readWorkerEnv(): Result<WorkerEnv, string> {
     return err('Missing TXLINE_API_TOKEN. Run: pnpm --filter @calledit/spike activate');
   }
 
-  const rawPort = emptyToUndefined(process.env['WORKER_PORT']);
+  // WORKER_PORT wins locally; PORT is what Railway and most hosts inject.
+  const rawPort =
+    emptyToUndefined(process.env['WORKER_PORT']) ?? emptyToUndefined(process.env['PORT']);
   const port = rawPort !== undefined ? Number.parseInt(rawPort, 10) : DEFAULT_WORKER_PORT;
   if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    return err(`WORKER_PORT must be a TCP port between 1 and 65535, got: ${rawPort ?? ''}`);
+    return err(`WORKER_PORT/PORT must be a TCP port between 1 and 65535, got: ${rawPort ?? ''}`);
   }
 
   const tapesDirectory =

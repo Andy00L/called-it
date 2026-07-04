@@ -1,0 +1,12 @@
+# Mirror of .railwayignore: secrets and local-only data never enter the image.
+.env
+.env.local
+wallet.json
+*.keypair.json
+.scratch/
+spike/logs/
+apps/worker/tapes/
+*.ndjson
+node_modules/
+.claude/
+.git/

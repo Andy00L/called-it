@@ -55,6 +55,24 @@ observed 2026-07-02.
    for a finished match and for a match ~10h out (Portugal vs Croatia), but 32 records for one
    ~6h out (Spain vs Austria). The in-running vs pre-match availability window is undocumented.
 
+7. **Snapshot `Ts` ordering does not match `Score` content across action types.** In the USA
+   vs Bosnia snapshot, the `var_end` record (Ts ...697480) already carried the post-overturn
+   2-0 `Score`, while a `yellow_card` record with a LATER Ts (...787970) still carried the 1-0
+   state. Consumers reconstructing a final from a snapshot must read the `game_finalised`
+   record, not the latest-Ts record of any type and not file order. Related: `Score` is not
+   strictly monotonic under corrections (a VAR decision can add or remove goals), which makes
+   the `Confirmed` flag the only safe settlement trigger. Documenting both would save
+   consumers from subtle scoring bugs.
+
+8. **Undocumented lifecycle and correction actions exist and look useful.** The same capture
+   contains `action_amend` (with `Data = { Action, New, Previous }`, a diff of a corrected
+   earlier event), `action_discarded`, `var_end` carrying `Data.Outcome` (`"Overturned"`),
+   plus `clock_adjustment` (zeroes the clock at full time: `Clock = { Running: false,
+   Seconds: 0 }`), `status`, and `disconnected`. None of these appear in the OpenAPI spec.
+   The correction actions are exactly what a consumer app needs to display VAR drama
+   correctly, and `clock_adjustment` matters to anyone keying UI off the clock, so
+   documenting them would be high value.
+
 ## Confirmed schema (ground truth, for our own reference)
 
 - Score event top-level (PascalCase): `FixtureId, Ts, Seq, Id, Type, Action, GameState,
@@ -64,8 +82,9 @@ observed 2026-07-02.
 - `Score.ParticipantN.{H1,HT,H2,ET1,ET2,PE,Total}.{Goals,YellowCards,RedCards,Corners}` =
   cumulative per-period state. Primary resolution source (diff between updates).
 - `Data` by action: goal `{GoalType, PlayerId}`, red_card `{PlayerId, Type}`, yellow_card
-  `{PlayerId}`, var `{Type}`, shot `{Outcome}`, possible `{Corner, Goal, Penalty}`,
-  substitution `{Participant, PlayerInId, PlayerOutId}`.
+  `{PlayerId}`, var `{Type}`, var_end `{Outcome}` (e.g. `"Overturned"`), shot `{Outcome}`,
+  possible `{Corner, Goal, Penalty}`, substitution `{Participant, PlayerInId, PlayerOutId}`,
+  action_amend `{Action, New, Previous}`, action_discarded `{}`.
 - Odds markets seen: `1X2_PARTICIPANT_RESULT`, `ASIANHANDICAP_PARTICIPANT_GOALS`,
   `OVERUNDER_PARTICIPANT_GOALS`. `Pct` aligns with `PriceNames` / `Prices`.
 

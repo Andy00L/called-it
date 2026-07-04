@@ -8,24 +8,33 @@ import { extractEvents, latestClockSeconds, readStat } from './score.js';
 /**
  * Integration test over real captured data (USA vs Bosnia, devnet SL1, 2026-07-02).
  * Proves the readers and extractors work against actual API payload shapes.
- * Final totals from the fixture: 1 goal, 7 corners, 2 cards combined.
+ * Final totals per the game_finalised record: 2 goals (the second awarded after
+ * a VAR overturn at 78'), 7 corners, 2 cards combined.
  */
 const fixtureUrl = new URL('./__fixtures__/usa-bosnia-scores.json', import.meta.url);
 const updates = JSON.parse(readFileSync(fixtureUrl, 'utf8')) as ScoresUpdate[];
 
+/**
+ * The authoritative final state is the newest record carrying a Score (here
+ * game_finalised). File order is not Ts order, and snapshot records of other
+ * action types can carry stale Score copies (see docs/FEEDBACK.md finding 7).
+ */
 function finalScore(): ScoresUpdate['Score'] {
-  for (let i = updates.length - 1; i >= 0; i -= 1) {
-    const candidate = updates[i];
-    if (candidate?.Score !== undefined) {
-      return candidate.Score;
+  let newest: ScoresUpdate | undefined;
+  for (const update of updates) {
+    if (update.Score === undefined) {
+      continue;
+    }
+    if (newest === undefined || update.Ts > newest.Ts) {
+      newest = update;
     }
   }
-  return undefined;
+  return newest?.Score;
 }
 
 test('cumulative stats match the known final score', () => {
   const score = finalScore();
-  assert.equal(readStat(score, 'goals', 'either'), 1);
+  assert.equal(readStat(score, 'goals', 'either'), 2);
   assert.equal(readStat(score, 'corners', 'either'), 7);
   assert.equal(readStat(score, 'cards', 'either'), 2);
   assert.equal(readStat(score, 'corners', 'p1'), 4);

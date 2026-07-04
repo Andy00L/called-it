@@ -44,3 +44,23 @@ export function nextStreak(current: number, outcome: 'hit' | 'miss'): number {
   }
   return 0;
 }
+
+/**
+ * A pick after settlement: the market probability locked at pick time, the
+ * outcome, and the points actually awarded (streak included, 0 on a miss).
+ * Shared scoring unit consumed by the bookie and calibration modules.
+ */
+export interface SettledPick {
+  probabilityFraction: number;
+  outcome: 'hit' | 'miss';
+  pointsAwarded: number;
+}
+
+/** Total points over a slate of settled picks (misses carry 0 by contract). */
+export function sumAwardedPoints(picks: readonly SettledPick[]): number {
+  let total = 0;
+  for (const pick of picks) {
+    total += pick.pointsAwarded;
+  }
+  return total;
+}

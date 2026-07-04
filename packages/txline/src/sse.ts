@@ -6,6 +6,20 @@ export interface SseOptions {
 }
 
 /**
+ * HTTP-level failure while opening a stream. Carries the status code so
+ * long-lived consumers can react precisely (401 = re-acquire the guest JWT).
+ */
+export class StreamHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'StreamHttpError';
+    this.status = status;
+  }
+}
+
+/**
  * Minimal SSE client over fetch. Yields raw frames (id, event, data).
  * Node's fetch decompresses gzip transparently; we still advertise it.
  */
@@ -20,7 +34,10 @@ export async function* streamSse(url: string, options: SseOptions): AsyncGenerat
   });
   if (!response.ok || response.body === null) {
     const body = await response.text().catch(() => '');
-    throw new Error(`SSE ${url} -> ${response.status}: ${body.slice(0, 300)}`);
+    throw new StreamHttpError(
+      response.status,
+      `SSE ${url} -> ${response.status}: ${body.slice(0, 300)}`,
+    );
   }
 
   const decoder = new TextDecoder();

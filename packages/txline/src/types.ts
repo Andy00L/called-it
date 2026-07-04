@@ -69,9 +69,12 @@ export interface SoccerFixtureScore {
  * - yellow_card: { PlayerId }
  * - red_card: { PlayerId, Type }        e.g. Type "StraightRed"
  * - var: { Type }                        e.g. Type "Goal" (what is under review)
+ * - var_end: { Outcome }                 e.g. "Overturned" (review verdict)
  * - shot: { Outcome }                    e.g. "OffTarget"
  * - possible: { Corner, Goal, Penalty }  pre-signal booleans
  * - substitution: { Participant, PlayerInId, PlayerOutId }
+ * - action_amend: { Action, New, Previous }  correction diff of a prior event
+ *   (observed in the USA vs Bosnia capture; not in the OpenAPI spec)
  */
 export interface SoccerData {
   GoalType?: string;
@@ -84,6 +87,11 @@ export interface SoccerData {
   Corner?: boolean;
   Goal?: boolean;
   Penalty?: boolean;
+  /** action_amend only: which action kind was corrected. */
+  Action?: string;
+  /** action_amend only: corrected and prior event payloads. */
+  New?: unknown;
+  Previous?: unknown;
 }
 
 export interface MatchClock {

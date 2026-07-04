@@ -3,3 +3,5 @@ export * from './calls.js';
 export * from './score.js';
 export * from './odds.js';
 export * from './catalog.js';
+export * from './bookie.js';
+export * from './calibration.js';

@@ -38,7 +38,8 @@ export function readEnv(): SpikeEnv {
     cfg,
     rpcUrl,
     serviceLevelId: Number.parseInt(process.env['TXLINE_SERVICE_LEVEL_ID'] ?? '1', 10),
-    durationWeeks: Number.parseInt(process.env['TXLINE_DURATION_WEEKS'] ?? '3', 10),
+    // subscribe rejects durations that are not a multiple of 4 weeks (Txoracle InvalidWeeks 6041, see docs/FEEDBACK.md)
+    durationWeeks: Number.parseInt(process.env['TXLINE_DURATION_WEEKS'] ?? '4', 10),
     jwt: emptyToUndefined(process.env['TXLINE_JWT']),
     txSig: emptyToUndefined(process.env['TXLINE_TX_SIG']),
     apiToken: emptyToUndefined(process.env['TXLINE_API_TOKEN']),

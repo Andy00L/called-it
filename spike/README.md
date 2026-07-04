@@ -21,7 +21,8 @@ solana-keygen new --outfile wallet.json --no-bip39-passphrase
 
 - Dry run: `TXLINE_NETWORK=devnet`, `TXLINE_SERVICE_LEVEL_ID=1` (60 s delay)
 - Production data: `TXLINE_NETWORK=mainnet`, `TXLINE_SERVICE_LEVEL_ID=12` (real-time, free for World Cup)
-- `TXLINE_DURATION_WEEKS=3` covers the tournament through July 19.
+- `TXLINE_DURATION_WEEKS=4` covers the tournament through July 19. The on-chain program
+  only accepts multiples of 4; other values fail with `InvalidWeeks` (code 6041).
 
 ## 2. Run the sequence
 

@@ -12,3 +12,9 @@ wallet.json
 # spike logs
 spike/logs/
 *.ndjson
+
+# throwaway probes and scratch output
+.scratch/
+
+# Windows download artifacts (WSL exposes NTFS alternate data streams as files)
+*Zone.Identifier

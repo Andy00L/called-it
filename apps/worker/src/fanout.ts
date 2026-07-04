@@ -1,22 +1,46 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { err, ok, type Result } from '@calledit/txline';
 
 /**
- * Transport-only fan-out: JSON snapshots plus one SSE channel per fixture.
- * Payload composition lives in main.ts; this module never inspects payloads.
+ * Transport-only fan-out: JSON snapshots, one SSE channel per fixture, and a
+ * thin JSON API surface delegated to the game layer. Payload composition and
+ * game rules live in main.ts / game.ts; this module never inspects payloads.
  */
 
 // SSE comment cadence; keeps idle sockets alive through proxies.
 const KEEP_ALIVE_INTERVAL_MS = 15000;
 
+// JSON body cap for POST requests; lock payloads are tiny (product choice).
+const MAX_BODY_BYTES = 10000;
+
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'content-type, x-player-id, x-player-token',
+};
+
+export interface ApiResult {
+  status: number;
+  body: unknown;
+}
+
 export interface FanoutDeps {
   buildLivePayload(fixtureId: number): unknown | null;
   buildStatePayload(fixtureId: number): unknown | null;
   buildHealthPayload(): unknown;
+  /** Game API routes; returns null when the path is not an API route. */
+  handleApiRequest(
+    method: string,
+    segments: string[],
+    body: unknown,
+    headers: IncomingMessage['headers'],
+  ): Promise<ApiResult | null>;
 }
 
 export interface Fanout {
   server: Server;
   broadcast(fixtureId: number): void;
+  broadcastEvent(fixtureId: number, eventName: string, payload: unknown): void;
   clientCount(): number;
   close(): void;
 }
@@ -25,9 +49,40 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown): 
   const text = JSON.stringify(body);
   response.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
+    ...CORS_HEADERS,
   });
   response.end(text);
+}
+
+/** Read a JSON request body with a hard size cap. */
+function readJsonBody(request: IncomingMessage): Promise<Result<unknown, string>> {
+  return new Promise((resolvePromise) => {
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    request.on('data', (chunk: Buffer) => {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_BODY_BYTES) {
+        request.removeAllListeners('data');
+        request.removeAllListeners('end');
+        resolvePromise(err('body_too_large'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      if (raw === '') {
+        resolvePromise(ok({}));
+        return;
+      }
+      try {
+        resolvePromise(ok(JSON.parse(raw) as unknown));
+      } catch {
+        resolvePromise(err('invalid_json'));
+      }
+    });
+    request.on('error', () => resolvePromise(err('body_read_failed')));
+  });
 }
 
 export function createFanout(deps: FanoutDeps): Fanout {
@@ -53,7 +108,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      ...CORS_HEADERS,
     });
     response.write(': connected\n\n');
 
@@ -68,19 +123,51 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
   };
 
-  const handleRequest = (request: IncomingMessage, response: ServerResponse): void => {
-    if (request.method !== 'GET') {
-      sendJson(response, 405, { error: 'method not allowed; this API is read-only GET' });
+  const routeRequest = async (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> => {
+    const method = request.method ?? 'GET';
+    if (method === 'OPTIONS') {
+      response.writeHead(204, CORS_HEADERS);
+      response.end();
       return;
     }
+    if (method !== 'GET' && method !== 'POST') {
+      sendJson(response, 405, { error: 'method not allowed; use GET or POST' });
+      return;
+    }
+
     const requestUrl = new URL(request.url ?? '/', 'http://fanout.local');
     const segments = requestUrl.pathname.split('/').filter((segment) => segment !== '');
 
-    if (segments.length === 1 && segments[0] === 'health') {
+    let body: unknown = undefined;
+    if (method === 'POST') {
+      const bodyResult = await readJsonBody(request);
+      if (!bodyResult.ok) {
+        sendJson(response, bodyResult.error === 'body_too_large' ? 413 : 400, {
+          error: bodyResult.error,
+        });
+        return;
+      }
+      body = bodyResult.value;
+    }
+
+    const apiResult = await deps.handleApiRequest(method, segments, body, request.headers);
+    if (apiResult !== null) {
+      sendJson(response, apiResult.status, apiResult.body);
+      return;
+    }
+
+    if (method === 'GET' && segments.length === 1 && segments[0] === 'health') {
       sendJson(response, 200, deps.buildHealthPayload());
       return;
     }
-    if (segments.length === 2 && (segments[0] === 'state' || segments[0] === 'live')) {
+    if (
+      method === 'GET' &&
+      segments.length === 2 &&
+      (segments[0] === 'state' || segments[0] === 'live')
+    ) {
       const fixtureId = Number.parseInt(segments[1] ?? '', 10);
       if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
         sendJson(response, 400, { error: 'fixtureId must be a positive integer' });
@@ -98,10 +185,21 @@ export function createFanout(deps: FanoutDeps): Fanout {
       sendJson(response, 200, statePayload);
       return;
     }
-    sendJson(response, 404, { error: 'unknown route; use /health, /state/:fixtureId, /live/:fixtureId' });
+    sendJson(response, 404, {
+      error:
+        'unknown route; use /health, /state/:fixtureId, /live/:fixtureId, /leaderboard, /profile/:playerId, POST /players/guest, POST /picks',
+    });
   };
 
-  const server = createServer(handleRequest);
+  const server = createServer((request, response) => {
+    routeRequest(request, response).catch((cause: unknown) => {
+      const messageText = cause instanceof Error ? cause.message : String(cause);
+      console.error(`[routeRequest] unhandled: ${messageText}`);
+      if (!response.headersSent) {
+        sendJson(response, 500, { error: 'internal' });
+      }
+    });
+  });
 
   const keepAliveTimer = setInterval(() => {
     for (const clients of clientsByFixture.values()) {
@@ -111,19 +209,23 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
   }, KEEP_ALIVE_INTERVAL_MS);
 
-  const broadcast = (fixtureId: number): void => {
+  const broadcastEvent = (fixtureId: number, eventName: string, payload: unknown): void => {
     const clients = clientsByFixture.get(fixtureId);
     if (clients === undefined || clients.size === 0) {
       return;
     }
+    const frame = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
+    for (const client of clients) {
+      client.write(frame);
+    }
+  };
+
+  const broadcast = (fixtureId: number): void => {
     const payload = deps.buildLivePayload(fixtureId);
     if (payload === null) {
       return;
     }
-    const frame = `event: state\ndata: ${JSON.stringify(payload)}\n\n`;
-    for (const client of clients) {
-      client.write(frame);
-    }
+    broadcastEvent(fixtureId, 'state', payload);
   };
 
   const clientCount = (): number => {
@@ -145,5 +247,5 @@ export function createFanout(deps: FanoutDeps): Fanout {
     server.close();
   };
 
-  return { server, broadcast, clientCount, close };
+  return { server, broadcast, broadcastEvent, clientCount, close };
 }

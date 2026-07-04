@@ -22,6 +22,9 @@ export interface WorkerEnv {
   port: number;
   /** Directory receiving one NDJSON tape per fixture. */
   tapesDirectory: string;
+  /** Both present = durable persistence; both absent = memory fallback. */
+  supabaseUrl: string | undefined;
+  supabaseSecretKey: string | undefined;
 }
 
 function emptyToUndefined(value: string | undefined): string | undefined {
@@ -60,5 +63,14 @@ export function readWorkerEnv(): Result<WorkerEnv, string> {
   const tapesDirectory =
     emptyToUndefined(process.env['TAPES_DIR']) ?? resolve(import.meta.dirname, '../tapes');
 
-  return ok({ cfg, jwt, apiToken, port, tapesDirectory });
+  const supabaseUrl = emptyToUndefined(process.env['SUPABASE_URL']);
+  const supabaseSecretKey = emptyToUndefined(process.env['SUPABASE_SECRET_KEY']);
+  // Half-configured persistence is a silent-data-loss footgun: refuse it.
+  if ((supabaseUrl === undefined) !== (supabaseSecretKey === undefined)) {
+    return err(
+      'SUPABASE_URL and SUPABASE_SECRET_KEY must be set together (or both left empty for memory mode)',
+    );
+  }
+
+  return ok({ cfg, jwt, apiToken, port, tapesDirectory, supabaseUrl, supabaseSecretKey });
 }

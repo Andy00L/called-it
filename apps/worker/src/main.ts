@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import {
   generateCalls,
   pickBookieDeck,
@@ -21,9 +22,12 @@ import {
   listMatchStates,
   type MatchPhase,
 } from './state.js';
-import { createFanout } from './fanout.js';
+import { createFanout, type ApiResult } from './fanout.js';
 import { runIngest } from './ingest.js';
 import { readWorkerEnv } from './env.js';
+import { createGameService, type GameService } from './game.js';
+import { createMemoryPersistence } from './persistence-memory.js';
+import { createSupabasePersistence } from './persistence-supabase.js';
 
 // Events included in live payloads; the full timeline stays in the tape.
 const LIVE_PAYLOAD_EVENT_LIMIT = 50;
@@ -44,7 +48,93 @@ export interface LivePayload {
   updatedAtMs: number;
 }
 
-function main(): void {
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function asRecord(body: unknown): Record<string, unknown> {
+  return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+}
+
+/** Map game-service error codes onto HTTP statuses (distinct per failure mode). */
+function statusForGameError(code: string): number {
+  if (code === 'auth_failed') {
+    return 401;
+  }
+  if (code === 'unknown_fixture' || code === 'unknown_option' || code === 'unknown_player') {
+    return 404;
+  }
+  if (code === 'duplicate_category' || code === 'not_in_running' || code === 'window_too_short') {
+    return 409;
+  }
+  if (code.startsWith('invalid_')) {
+    return 400;
+  }
+  return 500;
+}
+
+function buildApiHandler(game: GameService) {
+  return async (
+    method: string,
+    segments: string[],
+    body: unknown,
+    headers: IncomingMessage['headers'],
+  ): Promise<ApiResult | null> => {
+    if (method === 'POST' && segments.length === 2 && segments[0] === 'players' && segments[1] === 'guest') {
+      const created = await game.createGuestPlayer(asRecord(body)['handle']);
+      if (!created.ok) {
+        return { status: statusForGameError(created.error), body: { error: created.error } };
+      }
+      return { status: 200, body: created.value };
+    }
+
+    if (method === 'POST' && segments.length === 1 && segments[0] === 'picks') {
+      const bodyRecord = asRecord(body);
+      const locked = await game.lockPick(
+        firstHeaderValue(headers['x-player-id']),
+        firstHeaderValue(headers['x-player-token']),
+        bodyRecord['fixtureId'],
+        bodyRecord['optionId'],
+      );
+      if (!locked.ok) {
+        return { status: statusForGameError(locked.error), body: { error: locked.error } };
+      }
+      return { status: 200, body: locked.value };
+    }
+
+    if (method === 'GET' && segments.length === 1 && segments[0] === 'leaderboard') {
+      const rows = await game.leaderboardGlobal();
+      if (!rows.ok) {
+        return { status: 500, body: { error: rows.error } };
+      }
+      return { status: 200, body: rows.value };
+    }
+
+    if (method === 'GET' && segments.length === 2 && segments[0] === 'leaderboard') {
+      const fixtureId = Number.parseInt(segments[1] ?? '', 10);
+      if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+        return { status: 400, body: { error: 'fixtureId must be a positive integer' } };
+      }
+      const rows = await game.leaderboardFixture(fixtureId);
+      if (!rows.ok) {
+        return { status: 500, body: { error: rows.error } };
+      }
+      return { status: 200, body: rows.value };
+    }
+
+    if (method === 'GET' && segments.length === 2 && segments[0] === 'profile') {
+      const profile = await game.profile(segments[1]);
+      if (!profile.ok) {
+        return { status: statusForGameError(profile.error), body: { error: profile.error } };
+      }
+      return { status: 200, body: profile.value };
+    }
+
+    return null;
+  };
+}
+
+async function main(): Promise<void> {
   const envResult = readWorkerEnv();
   if (!envResult.ok) {
     console.error(`[main] ${envResult.error}`);
@@ -60,6 +150,15 @@ function main(): void {
     return;
   }
   const tapeDeck = deckResult.value;
+
+  const persistence =
+    env.supabaseUrl !== undefined && env.supabaseSecretKey !== undefined
+      ? createSupabasePersistence(env.supabaseUrl, env.supabaseSecretKey)
+      : createMemoryPersistence();
+  console.log(`[main] persistence backend: ${persistence.describeBackend()}`);
+  if (persistence.describeBackend().startsWith('memory')) {
+    console.warn('[main] SUPABASE_URL/SUPABASE_SECRET_KEY missing: picks are NOT durable');
+  }
 
   const store = createMatchStateStore();
   const scoresLatency = createLatencyTracker();
@@ -94,21 +193,41 @@ function main(): void {
     };
   };
 
+  const game = createGameService({
+    persistence,
+    store,
+    onSettlement: (notice) => {
+      fanout.broadcastEvent(notice.fixtureId, 'settlement', notice);
+    },
+  });
+
   const fanout = createFanout({
     buildLivePayload,
     buildStatePayload: (fixtureId) => getMatchState(store, fixtureId) ?? null,
     buildHealthPayload: () => ({
       ok: true,
       network: env.cfg.network,
+      persistence: persistence.describeBackend(),
       uptimeSeconds: Math.round((Date.now() - startedAtMs) / 1000),
       fixturesTracked: listMatchStates(store).length,
+      pendingPicks: game.pendingPickCount(),
       sseClients: fanout.clientCount(),
       lastHeartbeatMs,
       latency: { scores: snapshotLatency(scoresLatency), odds: snapshotLatency(oddsLatency) },
     }),
+    handleApiRequest: buildApiHandler(game),
   });
 
+  await game.hydratePendingPicks();
+
   const abortController = new AbortController();
+
+  const triggerResolution = (fixtureId: number): void => {
+    game.resolveFixture(fixtureId).catch((cause: unknown) => {
+      const messageText = cause instanceof Error ? cause.message : String(cause);
+      console.error(`[triggerResolution] fixture ${fixtureId}: ${messageText}`);
+    });
+  };
 
   const ingestPromise = runIngest(
     env.cfg,
@@ -125,6 +244,7 @@ function main(): void {
         }
         recordLatency(scoresLatency, update.Ts, receivedAtMs);
         const state = applyScoresUpdate(store, update, receivedAtMs);
+        triggerResolution(state.fixtureId);
         fanout.broadcast(state.fixtureId);
       },
       onOddsPayload: (payload, receivedAtMs) => {
@@ -138,6 +258,7 @@ function main(): void {
         }
         recordLatency(oddsLatency, payload.Ts, receivedAtMs);
         const state = applyOddsPayload(store, payload, receivedAtMs);
+        triggerResolution(state.fixtureId);
         fanout.broadcast(state.fixtureId);
       },
       onHeartbeat: (stream, receivedAtMs) => {
@@ -165,4 +286,4 @@ function main(): void {
   process.once('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-main();
+void main();

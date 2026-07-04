@@ -29,10 +29,7 @@ export function readEnv(): SpikeEnv {
   }
   const network: TxlineNetwork = rawNetwork;
   const cfg = getNetworkConfig(network);
-  const rpcUrl =
-    process.env['SOLANA_RPC_URL'] !== undefined && process.env['SOLANA_RPC_URL'] !== ''
-      ? process.env['SOLANA_RPC_URL']
-      : cfg.defaultRpcUrl;
+  const rpcUrl = resolveRpcUrl(network, cfg);
 
   return {
     cfg,
@@ -53,6 +50,25 @@ export function readEnv(): SpikeEnv {
 
 function emptyToUndefined(value: string | undefined): string | undefined {
   return value === undefined || value === '' ? undefined : value;
+}
+
+/**
+ * Custom RPC resolution: the network-specific variable wins, then the generic
+ * one, then the public default. Network-specific vars exist so a mainnet
+ * action can never accidentally run against a devnet-only RPC endpoint.
+ */
+function resolveRpcUrl(network: TxlineNetwork, cfg: TxlineNetworkConfig): string {
+  const networkSpecific = emptyToUndefined(
+    process.env[network === 'mainnet' ? 'SOLANA_RPC_URL_MAINNET' : 'SOLANA_RPC_URL_DEVNET'],
+  );
+  if (networkSpecific !== undefined) {
+    return networkSpecific;
+  }
+  const generic = emptyToUndefined(process.env['SOLANA_RPC_URL']);
+  if (generic !== undefined) {
+    return generic;
+  }
+  return cfg.defaultRpcUrl;
 }
 
 export function loadKeypair(path: string): Keypair {

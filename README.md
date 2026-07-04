@@ -9,9 +9,12 @@ Built for the TxODDS World Cup Hackathon (Superteam Earn), Consumer and Fan Expe
 ## Workspace
 
 - `packages/txline` : typed TxLINE API client (auth, REST, SSE streams). No Solana deps.
+- `packages/engine` : pure game engine (pricing, calls, resolution, bookie, calibration).
 - `spike/` : runnable scripts to bootstrap API access and observe live data. See `spike/README.md`.
+- `apps/worker` : long-lived realtime worker: consumes both TxLINE streams, records NDJSON
+  tapes per fixture (Time Machine fuel), maintains live match state, serves SSE fan-out
+  (`/health`, `/state/:fixtureId`, `/live/:fixtureId`). Run: `pnpm --filter @calledit/worker start`.
 - `apps/web` : Next.js app (to come).
-- `apps/worker` : long-lived realtime worker (to come).
 - `docs/txline-openapi.yaml` : TxLINE OpenAPI spec (reference copy).
 - `submission-ideas.md` : research that led to this concept.
 

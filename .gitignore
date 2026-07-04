@@ -4,6 +4,7 @@ dist/
 .env
 .env.local
 *.local
+*.tsbuildinfo
 
 # secrets: never commit wallet keypairs
 wallet.json

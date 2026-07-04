@@ -10,13 +10,17 @@ import {
   resolveEventWindow,
   resolveProbHold,
   streakMultiplier,
-  type BookieMargin,
-  type CalibrationBucket,
   type CallOption,
   type PickOutcome,
   type SettledPick,
 } from '@calledit/engine';
 import { err, ok, type Result } from '@calledit/txline';
+import type {
+  GuestSession,
+  LockResult,
+  ProfilePayload,
+  SettlementNotice,
+} from '@calledit/contracts';
 import type {
   FixtureLeaderboardEntry,
   LeaderboardEntry,
@@ -46,36 +50,9 @@ const LEADERBOARD_LIMIT = 50;
 // (mirrors the players.handle check constraint in 0001_init.sql).
 const HANDLE_PATTERN = /^[\p{L}\p{N} _.-]{2,24}$/u;
 
-export interface GuestSession {
-  playerId: string;
-  playerToken: string;
-  handle: string;
-}
-
-export interface LockResult {
-  pick: PickRecord;
-  bookiePick: PickRecord | null;
-}
-
-export interface SettlementNotice {
-  fixtureId: number;
-  pick: PickRecord;
-  outcome: 'hit' | 'miss';
-  pointsAwarded: number;
-}
-
-export interface ProfilePayload {
-  playerId: string;
-  handle: string;
-  totalPoints: number;
-  currentStreak: number;
-  bestStreak: number;
-  settledPickCount: number;
-  edgeVsMarket: number | null;
-  marketBrierScore: number | null;
-  calibration: CalibrationBucket[];
-  bookie: BookieMargin;
-}
+// Wire-visible shapes live in the shared contract; re-exported for existing
+// import sites (tests, main).
+export type { GuestSession, LockResult, ProfilePayload, SettlementNotice };
 
 export interface GameServiceDeps {
   persistence: PersistencePort;

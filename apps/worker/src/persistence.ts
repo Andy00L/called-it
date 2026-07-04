@@ -1,11 +1,20 @@
-import type { CallCategory, CallPredicate } from '@calledit/engine';
 import type { Result } from '@calledit/txline';
+import type {
+  FixtureLeaderboardEntry,
+  LeaderboardEntry,
+  PickRecord,
+  PickStatus,
+} from '@calledit/contracts';
 
 /**
  * Persistence port for the game service. Two adapters implement it: memory
  * (tests, and fallback when Supabase credentials are absent) and Supabase
  * (production). All methods return errors as values; adapter error strings
  * start with a stable code so the service can branch on them.
+ *
+ * Wire-visible shapes (PickRecord, leaderboard rows) live in
+ * @calledit/contracts; they are re-exported here so adapters keep a single
+ * import site.
  */
 
 export interface PlayerRecord {
@@ -18,27 +27,7 @@ export interface PlayerRecord {
   bestStreak: number;
 }
 
-export type PickStatus = 'pending' | 'hit' | 'miss';
-
-export interface PickRecord {
-  id: string;
-  /** Null for The Bookie's ghost picks. */
-  playerId: string | null;
-  fixtureId: number;
-  optionId: string;
-  category: CallCategory;
-  claim: string;
-  predicate: CallPredicate;
-  /** Market or model probability locked at tap time, fraction in (0, 1]. */
-  probabilityFraction: number;
-  potentialPoints: number;
-  pricingSource: 'market' | 'model';
-  lockedAtMs: number;
-  lockClockSeconds: number;
-  isBookie: boolean;
-  bookieOfPickId: string | null;
-  status: PickStatus;
-}
+export type { FixtureLeaderboardEntry, LeaderboardEntry, PickRecord, PickStatus };
 
 export interface SettlementInput {
   pickId: string;
@@ -49,20 +38,6 @@ export interface SettlementInput {
   streakMultiplier: number;
   resolutionClockSeconds: number;
   newStreak: number;
-}
-
-export interface LeaderboardEntry {
-  playerId: string;
-  handle: string;
-  totalPoints: number;
-  currentStreak: number;
-  bestStreak: number;
-}
-
-export interface FixtureLeaderboardEntry {
-  playerId: string;
-  handle: string;
-  fixturePoints: number;
 }
 
 /** A settled pick reduced to what calibration and margin math need. */

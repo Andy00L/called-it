@@ -1,4 +1,4 @@
-import type { FixtureSummary } from '@calledit/contracts';
+import type { FixtureSummary, LeaderboardEntry } from '@calledit/contracts';
 
 /**
  * Worker API access. The worker URL is public configuration (the API is
@@ -17,6 +17,32 @@ export function workerUrl(): string {
 export type FixturesResult =
   | { ok: true; fixtures: FixtureSummary[] }
   | { ok: false; reason: 'unreachable' | 'bad_status' | 'bad_payload' };
+
+export type LeaderboardResult =
+  | { ok: true; entries: LeaderboardEntry[] }
+  | { ok: false; reason: 'unreachable' | 'bad_status' | 'bad_payload' };
+
+/** Server-side leaderboard fetch; always fresh. */
+export async function fetchLeaderboard(): Promise<LeaderboardResult> {
+  let response: Response;
+  try {
+    response = await fetch(`${workerUrl()}/leaderboard`, { cache: 'no-store' });
+  } catch {
+    return { ok: false, reason: 'unreachable' };
+  }
+  if (!response.ok) {
+    return { ok: false, reason: 'bad_status' };
+  }
+  try {
+    const payload = (await response.json()) as LeaderboardEntry[];
+    if (!Array.isArray(payload)) {
+      return { ok: false, reason: 'bad_payload' };
+    }
+    return { ok: true, entries: payload };
+  } catch {
+    return { ok: false, reason: 'bad_payload' };
+  }
+}
 
 /** Server-side lobby fetch; always fresh (live scores go stale in seconds). */
 export async function fetchFixtures(): Promise<FixturesResult> {

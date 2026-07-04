@@ -1,5 +1,9 @@
 import type {
+  BookieMargin,
+  CalibrationBucket,
+  CallCategory,
   CallOption,
+  CallPredicate,
   MatchEvent,
   MatchResultProbabilities,
 } from '@calledit/engine';
@@ -53,4 +57,86 @@ export interface FixtureSummary {
   updatedAtMs: number;
 }
 
-export type { CallOption, MatchEvent, MatchResultProbabilities };
+/** POST /players/guest response. The token is shown once; store it client-side. */
+export interface GuestSession {
+  playerId: string;
+  playerToken: string;
+  handle: string;
+}
+
+export type PickStatus = 'pending' | 'hit' | 'miss';
+
+/** One locked call, human or ghost (The Bookie), as persisted and served. */
+export interface PickRecord {
+  id: string;
+  /** Null for The Bookie's ghost picks. */
+  playerId: string | null;
+  fixtureId: number;
+  optionId: string;
+  category: CallCategory;
+  claim: string;
+  predicate: CallPredicate;
+  /** Market or model probability locked at tap time, fraction in (0, 1]. */
+  probabilityFraction: number;
+  potentialPoints: number;
+  pricingSource: 'market' | 'model';
+  lockedAtMs: number;
+  lockClockSeconds: number;
+  isBookie: boolean;
+  bookieOfPickId: string | null;
+  status: PickStatus;
+}
+
+/** POST /picks response: the human pick plus The Bookie's mirror. */
+export interface LockResult {
+  pick: PickRecord;
+  bookiePick: PickRecord | null;
+}
+
+/** SSE "settlement" event on /live/:fixtureId, one per settled pick. */
+export interface SettlementNotice {
+  fixtureId: number;
+  pick: PickRecord;
+  outcome: 'hit' | 'miss';
+  pointsAwarded: number;
+}
+
+/** One row of GET /leaderboard. */
+export interface LeaderboardEntry {
+  playerId: string;
+  handle: string;
+  totalPoints: number;
+  currentStreak: number;
+  bestStreak: number;
+}
+
+/** One row of GET /leaderboard/:fixtureId. */
+export interface FixtureLeaderboardEntry {
+  playerId: string;
+  handle: string;
+  fixturePoints: number;
+}
+
+/** GET /profile/:playerId response: the skill profile. */
+export interface ProfilePayload {
+  playerId: string;
+  handle: string;
+  totalPoints: number;
+  currentStreak: number;
+  bestStreak: number;
+  settledPickCount: number;
+  edgeVsMarket: number | null;
+  marketBrierScore: number | null;
+  calibration: CalibrationBucket[];
+  bookie: BookieMargin;
+}
+
+export type {
+  BookieMargin,
+  CalibrationBucket,
+  CallCategory,
+  CallOption,
+  CallPredicate,
+  MatchEvent,
+  MatchResultProbabilities,
+};

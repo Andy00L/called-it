@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { FixtureSummary } from '@calledit/contracts';
 import { fetchFixtures } from '../lib/api';
 import { EmptyState } from '../components/ui/empty-state';
@@ -24,11 +25,19 @@ export default async function LobbyPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-mono text-2xl font-semibold tracking-tight">CALLED IT</h1>
-        <p className="text-sm text-ink-muted">
-          Call the match before it happens. The market sets the price.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="font-mono text-2xl font-semibold tracking-tight">CALLED IT</h1>
+          <p className="text-sm text-ink-muted">
+            Call the match before it happens. The market sets the price.
+          </p>
+        </div>
+        <Link
+          href="/leaderboard"
+          className="shrink-0 text-sm text-ink-muted transition-colors duration-[var(--duration-small)] hover:text-ink"
+        >
+          Leaderboard
+        </Link>
       </header>
 
       {!result.ok ? (

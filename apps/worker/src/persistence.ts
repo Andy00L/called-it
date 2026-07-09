@@ -83,6 +83,8 @@ export interface PersistencePort {
   describeBackend(): string;
   createPlayer(handle: string, tokenHash: string): Promise<Result<PlayerRecord, string>>;
   getPlayer(playerId: string): Promise<Result<PlayerRecord | null, string>>;
+  /** Rename a player; leaderboards and receipts read the handle live. */
+  updatePlayerHandle(playerId: string, handle: string): Promise<Result<void, string>>;
   /** Insert the human pick and its ghost mirror in one atomic write. */
   insertPickPair(
     humanPick: PickRecord,

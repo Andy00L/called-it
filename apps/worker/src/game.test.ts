@@ -110,6 +110,29 @@ test('guest creation validates the handle', async () => {
   assert.ok(created.value.playerToken.length >= 64);
 });
 
+test('a player can rename their handle; auth and validation gate it', async () => {
+  const harness = createHarness();
+  const guest = await createGuest(harness, 'old name');
+
+  const badToken = await harness.game.renameHandle(guest.playerId, 'wrong', 'newname');
+  assert.ok(!badToken.ok && badToken.error === 'auth_failed');
+
+  const badHandle = await harness.game.renameHandle(guest.playerId, guest.playerToken, '!');
+  assert.ok(!badHandle.ok && badHandle.error.startsWith('invalid_handle'));
+
+  const reserved = await harness.game.renameHandle(guest.playerId, guest.playerToken, 'The Bookie');
+  assert.ok(!reserved.ok && reserved.error === 'invalid_handle: reserved name');
+
+  const renamed = await harness.game.renameHandle(guest.playerId, guest.playerToken, ' fresh name ');
+  assert.ok(renamed.ok);
+  assert.equal(renamed.value.handle, 'fresh name');
+
+  // The rename is visible everywhere the handle is read live.
+  const player = await harness.persistence.getPlayer(guest.playerId);
+  assert.ok(player.ok && player.value !== null);
+  assert.equal(player.value.handle, 'fresh name');
+});
+
 test('lock rejects bad auth, unknown fixtures, and unknown options', async () => {
   const harness = createHarness();
   primeLiveMatch(harness, 100, 600);

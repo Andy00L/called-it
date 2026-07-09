@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import { resolve } from 'node:path';
 import type { LivePayload, ReceiptPayload } from '@calledit/contracts';
 import { ok, type Result } from '@calledit/txline';
 import { appendTapeEntry, openTapeDeck } from './tape.js';
@@ -150,6 +151,18 @@ function buildApiHandler(game: GameService, receipts: ReceiptSource, replay: Rep
       return { status: 200, body: created.value };
     }
 
+    if (method === 'POST' && segments.length === 2 && segments[0] === 'players' && segments[1] === 'handle') {
+      const renamed = await game.renameHandle(
+        firstHeaderValue(headers['x-player-id']),
+        firstHeaderValue(headers['x-player-token']),
+        asRecord(body)['handle'],
+      );
+      if (!renamed.ok) {
+        return { status: statusForGameError(renamed.error), body: { error: renamed.error } };
+      }
+      return { status: 200, body: renamed.value };
+    }
+
     if (method === 'POST' && segments.length === 1 && segments[0] === 'picks') {
       const bodyRecord = asRecord(body);
       const locked = await game.lockPick(
@@ -229,7 +242,13 @@ async function main(): Promise<void> {
   const lastHeartbeatMs: Record<'scores' | 'odds', number> = { scores: 0, odds: 0 };
 
   const sharedAuth = createSharedAuth({ jwt: env.jwt, apiToken: env.apiToken });
-  const fixtureCatalog = createFixtureCatalog(env.cfg, sharedAuth);
+  // The seen-file lives inside the tapes directory (persistent volume on
+  // Railway); the tape listing pattern ignores it (fixture-<id>.ndjson only).
+  const fixtureCatalog = createFixtureCatalog(
+    env.cfg,
+    sharedAuth,
+    resolve(env.tapesDirectory, 'fixtures-seen.ndjson'),
+  );
 
   const buildLivePayload = (fixtureId: number): LivePayload | null => {
     const state = getMatchState(store, fixtureId);

@@ -203,6 +203,14 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
       return ok(data === null ? null : playerFromRow(data as PlayerRow));
     },
 
+    updatePlayerHandle: async (playerId, handle) => {
+      const { error } = await client.from('players').update({ handle }).eq('id', playerId);
+      if (error !== null) {
+        return err(`players update failed: ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
     insertPickPair: async (humanPick, bookiePick) => {
       const rows = [pickToRow(humanPick)];
       if (bookiePick !== null) {

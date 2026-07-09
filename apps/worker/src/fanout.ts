@@ -224,7 +224,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
     sendJson(response, 404, {
       error:
-        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /leaderboard/:fixtureId, /profile/:playerId, /receipts/:pickId, POST /players/guest, POST /picks, GET /replay/tapes, POST /replay/sessions, GET /replay/sessions/:sessionId/live',
+        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /leaderboard/:fixtureId, /profile/:playerId, /receipts/:pickId, POST /players/guest, POST /players/handle, POST /picks, GET /replay/tapes, POST /replay/sessions, GET /replay/sessions/:sessionId/live',
     });
   };
 

@@ -50,6 +50,9 @@ const LEADERBOARD_LIMIT = 50;
 // (mirrors the players.handle check constraint in 0001_init.sql).
 const HANDLE_PATTERN = /^[\p{L}\p{N} _.-]{2,24}$/u;
 
+// Impersonating the ghost opponent would corrupt the product story.
+const RESERVED_HANDLES = ['the bookie'];
+
 // Wire-visible shapes live in the shared contract; re-exported for existing
 // import sites (tests, main).
 export type { GuestSession, LockResult, ProfilePayload, SettlementNotice };
@@ -66,6 +69,11 @@ export interface GameServiceDeps {
 export interface GameService {
   hydratePendingPicks(): Promise<void>;
   createGuestPlayer(rawHandle: unknown): Promise<Result<GuestSession, string>>;
+  renameHandle(
+    rawPlayerId: unknown,
+    rawPlayerToken: unknown,
+    rawHandle: unknown,
+  ): Promise<Result<{ playerId: string; handle: string }, string>>;
   lockPick(
     rawPlayerId: unknown,
     rawPlayerToken: unknown,
@@ -236,6 +244,28 @@ export function createGameService(deps: GameServiceDeps): GameService {
         return created;
       }
       return ok({ playerId: created.value.id, playerToken, handle });
+    },
+
+    renameHandle: async (rawPlayerId, rawPlayerToken, rawHandle) => {
+      if (typeof rawPlayerId !== 'string' || typeof rawPlayerToken !== 'string') {
+        return err('auth_failed');
+      }
+      if (typeof rawHandle !== 'string' || !HANDLE_PATTERN.test(rawHandle.trim())) {
+        return err('invalid_handle: 2 to 24 letters, numbers, spaces, _ . -');
+      }
+      const handle = rawHandle.trim();
+      if (RESERVED_HANDLES.includes(handle.toLowerCase())) {
+        return err('invalid_handle: reserved name');
+      }
+      const authenticated = await authenticate(rawPlayerId, rawPlayerToken);
+      if (!authenticated.ok) {
+        return authenticated;
+      }
+      const updated = await deps.persistence.updatePlayerHandle(authenticated.value.id, handle);
+      if (!updated.ok) {
+        return updated;
+      }
+      return ok({ playerId: authenticated.value.id, handle });
     },
 
     lockPick: async (rawPlayerId, rawPlayerToken, rawFixtureId, rawOptionId) => {

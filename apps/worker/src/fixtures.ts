@@ -1,3 +1,4 @@
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import {
   fetchFixturesSnapshot,
   type Fixture,
@@ -13,6 +14,11 @@ import type { MatchState } from './state.js';
  * lobby's GET /fixtures. The streams only carry fixture ids; names come from
  * the fixtures snapshot, refreshed on a slow cadence because kickoffs and
  * names change rarely inside the 30 day snapshot window.
+ *
+ * The snapshot window is FUTURE-ONLY (verified on mainnet 2026-07-09), so a
+ * restart would lose the names of every finished match, and receipts are read
+ * weeks later by judges. Every fixture ever seen is therefore appended to an
+ * NDJSON file (same crash-tolerant format as tapes) and restored at boot.
  */
 
 // Slow refresh: the snapshot is a 30 day window; a new match day appears at
@@ -29,9 +35,58 @@ export interface FixtureCatalog {
 export function createFixtureCatalog(
   cfg: TxlineNetworkConfig,
   shared: SharedAuth,
+  /** Optional NDJSON path persisting every fixture ever seen. */
+  seenFilePath?: string,
 ): FixtureCatalog {
   const fixturesById = new Map<number, Fixture>();
+  const persistedFixtureIds = new Set<number>();
   let refreshTimer: NodeJS.Timeout | null = null;
+
+  if (seenFilePath !== undefined && existsSync(seenFilePath)) {
+    let restoredCount = 0;
+    for (const line of readFileSync(seenFilePath, 'utf8').split('\n')) {
+      if (line === '') {
+        continue;
+      }
+      try {
+        const fixture = JSON.parse(line) as Fixture;
+        if (typeof fixture.FixtureId === 'number') {
+          fixturesById.set(fixture.FixtureId, fixture);
+          persistedFixtureIds.add(fixture.FixtureId);
+          restoredCount += 1;
+        }
+      } catch {
+        // Torn line after a crash: skip it, the fixture reappears on refresh
+        // if it is still in the window.
+      }
+    }
+    console.log(`[createFixtureCatalog] restored ${restoredCount} fixtures from ${seenFilePath}`);
+  }
+
+  // Names and kickoffs of an already-persisted fixture rarely change; only
+  // new fixture ids are appended (append-only keeps the file crash-safe).
+  const persistNewFixtures = (): void => {
+    if (seenFilePath === undefined) {
+      return;
+    }
+    try {
+      let appendedCount = 0;
+      for (const [fixtureId, fixture] of fixturesById) {
+        if (persistedFixtureIds.has(fixtureId)) {
+          continue;
+        }
+        appendFileSync(seenFilePath, `${JSON.stringify(fixture)}\n`);
+        persistedFixtureIds.add(fixtureId);
+        appendedCount += 1;
+      }
+      if (appendedCount > 0) {
+        console.log(`[persistNewFixtures] appended ${appendedCount} fixtures to ${seenFilePath}`);
+      }
+    } catch (cause) {
+      const messageText = cause instanceof Error ? cause.message : String(cause);
+      console.error(`[persistNewFixtures] ${messageText}`);
+    }
+  };
 
   const refresh = async (): Promise<void> => {
     const auth = { jwt: shared.current.jwt, apiToken: shared.current.apiToken };
@@ -53,6 +108,7 @@ export function createFixtureCatalog(
     for (const fixture of snapshot.value) {
       fixturesById.set(fixture.FixtureId, fixture);
     }
+    persistNewFixtures();
     console.log(`[refreshFixtureCatalog] catalog holds ${fixturesById.size} fixtures`);
   };
 

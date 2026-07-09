@@ -84,6 +84,15 @@ export function createMemoryPersistence(): PersistencePort {
 
     getPlayer: async (playerId) => ok(players.get(playerId) ?? null),
 
+    updatePlayerHandle: async (playerId, handle) => {
+      const player = players.get(playerId);
+      if (player === undefined) {
+        return err(`players update failed: unknown player ${playerId}`);
+      }
+      player.handle = handle;
+      return ok(undefined);
+    },
+
     insertPickPair: async (humanPick, bookiePick) => {
       if (hasPendingInCategory(humanPick)) {
         return err(`${PERSISTENCE_ERROR_DUPLICATE_CATEGORY}: ${humanPick.category}`);

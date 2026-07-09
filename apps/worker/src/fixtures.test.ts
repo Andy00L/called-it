@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, test } from 'node:test';
 import type { Fixture } from '@calledit/txline';
-import { summarizeFixtures } from './fixtures.js';
+import { createSharedAuth } from './ingest.js';
+import { createFixtureCatalog, summarizeFixtures } from './fixtures.js';
 import type { MatchState } from './state.js';
+
+const scratchDirectory = mkdtempSync(join(tmpdir(), 'calledit-fixtures-'));
+
+after(() => {
+  rmSync(scratchDirectory, { recursive: true, force: true });
+});
 
 function makeFixture(fixtureId: number, startTimeMs: number): Fixture {
   return {
@@ -73,4 +83,30 @@ test('rows sort by kickoff time', () => {
     rows.map((row) => row.fixtureId),
     [1, 2],
   );
+});
+
+test('the catalog restores fixtures from the seen-file at boot', () => {
+  const seenFilePath = join(scratchDirectory, 'fixtures-seen.ndjson');
+  appendFileSync(seenFilePath, `${JSON.stringify(makeFixture(18188721, 1000))}\n`);
+  // A torn final line (crash mid-append) must not break the restore.
+  appendFileSync(seenFilePath, '{"FixtureId": 99, "Part');
+
+  const catalog = createFixtureCatalog(
+    { network: 'mainnet', apiOrigin: '', apiBaseUrl: '', programId: '', txlMint: '', usdtMint: '', defaultRpcUrl: '' },
+    createSharedAuth({ jwt: 'jwt', apiToken: 'token' }),
+    seenFilePath,
+  );
+  const fixtures = catalog.listFixtures();
+  assert.equal(fixtures.length, 1);
+  assert.equal(fixtures[0]?.FixtureId, 18188721);
+  assert.equal(fixtures[0]?.Participant1, 'Spain');
+});
+
+test('a missing seen-file is not an error and the catalog starts empty', () => {
+  const catalog = createFixtureCatalog(
+    { network: 'mainnet', apiOrigin: '', apiBaseUrl: '', programId: '', txlMint: '', usdtMint: '', defaultRpcUrl: '' },
+    createSharedAuth({ jwt: 'jwt', apiToken: 'token' }),
+    join(scratchDirectory, 'absent.ndjson'),
+  );
+  assert.equal(catalog.listFixtures().length, 0);
 });

@@ -1,5 +1,4 @@
 import type { IncomingMessage } from 'node:http';
-import { generateCalls, pickBookieDeck, readStat } from '@calledit/engine';
 import type { LivePayload, ReceiptPayload } from '@calledit/contracts';
 import { ok, type Result } from '@calledit/txline';
 import { appendTapeEntry, openTapeDeck } from './tape.js';
@@ -9,13 +8,15 @@ import {
   verifyMerkleProof,
 } from './commitments.js';
 import { createMemoPoster } from './memo-poster.js';
+import { createSupabaseHeartbeat } from './heartbeat.js';
 import { createLatencyTracker, recordLatency, snapshotLatency } from './latency.js';
+import { buildLivePayloadForState } from './live-payload.js';
+import { createReplayManager, type ReplayManager } from './replay.js';
 import {
   applyOddsPayload,
   applyScoresUpdate,
   createMatchStateStore,
   getMatchState,
-  isInRunning,
   listMatchStates,
 } from './state.js';
 import { createFanout, type ApiResult } from './fanout.js';
@@ -25,9 +26,6 @@ import { readWorkerEnv } from './env.js';
 import { createGameService, type GameService } from './game.js';
 import { createMemoryPersistence } from './persistence-memory.js';
 import { createSupabasePersistence } from './persistence-supabase.js';
-
-// Events included in live payloads; the full timeline stays in the tape.
-const LIVE_PAYLOAD_EVENT_LIMIT = 50;
 
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -54,17 +52,84 @@ function statusForGameError(code: string): number {
   return 500;
 }
 
+/** Replay-specific error codes onto HTTP statuses; game codes fall through. */
+function statusForReplayError(code: string): number {
+  if (code === 'unknown_session' || code === 'no_tape') {
+    return 404;
+  }
+  if (code === 'replay_capacity') {
+    return 429;
+  }
+  if (code === 'fixture_still_live') {
+    return 409;
+  }
+  return statusForGameError(code);
+}
+
 interface ReceiptSource {
   buildReceipt(pickId: string): Promise<Result<ReceiptPayload | null, string>>;
 }
 
-function buildApiHandler(game: GameService, receipts: ReceiptSource) {
+function buildApiHandler(game: GameService, receipts: ReceiptSource, replay: ReplayManager) {
   return async (
     method: string,
     segments: string[],
     body: unknown,
     headers: IncomingMessage['headers'],
   ): Promise<ApiResult | null> => {
+    if (segments[0] === 'replay') {
+      if (method === 'GET' && segments.length === 2 && segments[1] === 'tapes') {
+        const tapes = replay.listTapes();
+        if (!tapes.ok) {
+          return { status: 500, body: { error: tapes.error } };
+        }
+        return { status: 200, body: tapes.value };
+      }
+      if (method === 'POST' && segments.length === 2 && segments[1] === 'sessions') {
+        const record = asRecord(body);
+        const created = await replay.createSession(record['fixtureId'], record['speed']);
+        if (!created.ok) {
+          return { status: statusForReplayError(created.error), body: { error: created.error } };
+        }
+        return { status: 200, body: created.value };
+      }
+      if (segments.length >= 3 && segments[1] === 'sessions') {
+        const sessionId = segments[2] ?? '';
+        if (method === 'GET' && segments.length === 3) {
+          const info = replay.sessionInfo(sessionId);
+          if (!info.ok) {
+            return { status: statusForReplayError(info.error), body: { error: info.error } };
+          }
+          return { status: 200, body: info.value };
+        }
+        if (method === 'POST' && segments.length === 4 && segments[3] === 'picks') {
+          const locked = await replay.lockPick(sessionId, asRecord(body)['optionId']);
+          if (!locked.ok) {
+            return { status: statusForReplayError(locked.error), body: { error: locked.error } };
+          }
+          return { status: 200, body: locked.value };
+        }
+        if (method === 'POST' && segments.length === 4 && segments[3] === 'speed') {
+          const updated = replay.setSpeed(sessionId, asRecord(body)['speed']);
+          if (!updated.ok) {
+            return { status: statusForReplayError(updated.error), body: { error: updated.error } };
+          }
+          return { status: 200, body: updated.value };
+        }
+        if (method === 'GET' && segments.length === 4 && segments[3] === 'profile') {
+          const sessionProfile = await replay.profile(sessionId);
+          if (!sessionProfile.ok) {
+            return {
+              status: statusForReplayError(sessionProfile.error),
+              body: { error: sessionProfile.error },
+            };
+          }
+          return { status: 200, body: sessionProfile.value };
+        }
+      }
+      // GET /replay/sessions/:id/live is the SSE stream: fanout handles it.
+    }
+
     if (method === 'GET' && segments.length === 2 && segments[0] === 'receipts') {
       const receipt = await receipts.buildReceipt(segments[1] ?? '');
       if (!receipt.ok) {
@@ -167,31 +232,9 @@ async function main(): Promise<void> {
 
   const buildLivePayload = (fixtureId: number): LivePayload | null => {
     const state = getMatchState(store, fixtureId);
-    if (state === undefined) {
-      return null;
-    }
-    const catalog = generateCalls({
-      clockSeconds: state.clockSeconds,
-      score: state.score,
-      matchResult: state.matchResult,
-      inRunning: isInRunning(state),
-    });
-    return {
-      fixtureId: state.fixtureId,
-      phase: state.phase,
-      clockSeconds: state.clockSeconds,
-      clockRunning: state.clockRunning,
-      goalsP1: readStat(state.score, 'goals', 'p1'),
-      goalsP2: readStat(state.score, 'goals', 'p2'),
-      score: state.score,
-      matchResult: state.matchResult,
-      eventCount: state.events.length,
-      recentEvents: state.events.slice(-LIVE_PAYLOAD_EVENT_LIMIT),
-      catalog,
-      bookieDeck: pickBookieDeck(catalog),
-      latency: { scores: snapshotLatency(scoresLatency), odds: snapshotLatency(oddsLatency) },
-      updatedAtMs: state.updatedAtMs,
-    };
+    return state === undefined
+      ? null
+      : buildLivePayloadForState(state, scoresLatency, oddsLatency);
   };
 
   const game = createGameService({
@@ -256,6 +299,19 @@ async function main(): Promise<void> {
   }
   const commitmentBatcher = createCommitmentBatcher({ persistence, postMemo });
 
+  // Time Machine: replays run on private stores and in-memory persistence;
+  // fanout callbacks resolve at call time, after fanout exists below.
+  const replayManager = createReplayManager({
+    deck: tapeDeck,
+    listFixtures: () => fixtureCatalog.listFixtures(),
+    isFixtureLive: (fixtureId) => {
+      const state = getMatchState(store, fixtureId);
+      return state !== undefined && state.phase !== 'finished';
+    },
+    onState: (sessionId) => fanout.broadcastReplay(sessionId),
+    onSettlement: (sessionId, notice) => fanout.broadcastReplayEvent(sessionId, 'settlement', notice),
+  });
+
   const fanout = createFanout({
     buildLivePayload,
     buildStatePayload: (fixtureId) => getMatchState(store, fixtureId) ?? null,
@@ -269,10 +325,13 @@ async function main(): Promise<void> {
       fixturesTracked: listMatchStates(store).length,
       pendingPicks: game.pendingPickCount(),
       sseClients: fanout.clientCount(),
+      replaySessions: replayManager.activeSessionCount(),
       lastHeartbeatMs,
       latency: { scores: snapshotLatency(scoresLatency), odds: snapshotLatency(oddsLatency) },
     }),
-    handleApiRequest: buildApiHandler(game, { buildReceipt }),
+    hasReplaySession: (sessionId) => replayManager.hasSession(sessionId),
+    buildReplayPayload: (sessionId) => replayManager.buildPayload(sessionId),
+    handleApiRequest: buildApiHandler(game, { buildReceipt }, replayManager),
   });
 
   await game.hydratePendingPicks();
@@ -284,6 +343,14 @@ async function main(): Promise<void> {
   // Catch up on any picks locked while the worker was down, then batch on.
   await commitmentBatcher.runOnce();
   commitmentBatcher.start();
+
+  // Keep the free-tier database awake through the judging window. Boot
+  // already touched Supabase (hydratePendingPicks), so no immediate run.
+  const heartbeat =
+    persistence.describeBackend() === 'supabase'
+      ? createSupabaseHeartbeat({ persistence })
+      : null;
+  heartbeat?.start();
 
   const abortController = new AbortController();
 
@@ -343,6 +410,8 @@ async function main(): Promise<void> {
     console.log(`[shutdown] ${signalName} received, stopping`);
     abortController.abort();
     commitmentBatcher.stop();
+    heartbeat?.stop();
+    replayManager.stopAll();
     fixtureCatalog.stop();
     fanout.close();
     void ingestPromise.then(() => {

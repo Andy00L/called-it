@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts src/fixtures.test.ts src/commitments.test.ts"
+    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts src/fixtures.test.ts src/commitments.test.ts src/heartbeat.test.ts src/replay.test.ts"
   },
   "dependencies": {
     "@calledit/contracts": "workspace:*",

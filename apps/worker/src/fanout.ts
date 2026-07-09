@@ -30,6 +30,9 @@ export interface FanoutDeps {
   buildHealthPayload(): unknown;
   /** Lobby listing: fixture metadata merged with live state summaries. */
   buildFixturesPayload(): unknown;
+  /** Replay SSE support: session existence check plus the initial frame. */
+  hasReplaySession(sessionId: string): boolean;
+  buildReplayPayload(sessionId: string): unknown | null;
   /** Game API routes; returns null when the path is not an API route. */
   handleApiRequest(
     method: string,
@@ -43,8 +46,19 @@ export interface Fanout {
   server: Server;
   broadcast(fixtureId: number): void;
   broadcastEvent(fixtureId: number, eventName: string, payload: unknown): void;
+  broadcastReplay(sessionId: string): void;
+  broadcastReplayEvent(sessionId: string, eventName: string, payload: unknown): void;
   clientCount(): number;
   close(): void;
+}
+
+/** SSE channels are keyed by string: live matches and replay sessions share the plumbing. */
+function liveChannelKey(fixtureId: number): string {
+  return `live:${fixtureId}`;
+}
+
+function replayChannelKey(sessionId: string): string {
+  return `replay:${sessionId}`;
 }
 
 function sendJson(response: ServerResponse, statusCode: number, body: unknown): void {
@@ -88,23 +102,24 @@ function readJsonBody(request: IncomingMessage): Promise<Result<unknown, string>
 }
 
 export function createFanout(deps: FanoutDeps): Fanout {
-  const clientsByFixture = new Map<number, Set<ServerResponse>>();
+  const clientsByChannel = new Map<string, Set<ServerResponse>>();
 
-  const removeClient = (fixtureId: number, response: ServerResponse): void => {
-    const clients = clientsByFixture.get(fixtureId);
+  const removeClient = (channelKey: string, response: ServerResponse): void => {
+    const clients = clientsByChannel.get(channelKey);
     if (clients === undefined) {
       return;
     }
     clients.delete(response);
     if (clients.size === 0) {
-      clientsByFixture.delete(fixtureId);
+      clientsByChannel.delete(channelKey);
     }
   };
 
-  const openLiveChannel = (
+  const openSseChannel = (
     request: IncomingMessage,
     response: ServerResponse,
-    fixtureId: number,
+    channelKey: string,
+    initialPayload: unknown | null,
   ): void => {
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -114,12 +129,11 @@ export function createFanout(deps: FanoutDeps): Fanout {
     });
     response.write(': connected\n\n');
 
-    const clients = clientsByFixture.get(fixtureId) ?? new Set<ServerResponse>();
+    const clients = clientsByChannel.get(channelKey) ?? new Set<ServerResponse>();
     clients.add(response);
-    clientsByFixture.set(fixtureId, clients);
-    request.on('close', () => removeClient(fixtureId, response));
+    clientsByChannel.set(channelKey, clients);
+    request.on('close', () => removeClient(channelKey, response));
 
-    const initialPayload = deps.buildLivePayload(fixtureId);
     if (initialPayload !== null) {
       response.write(`event: state\ndata: ${JSON.stringify(initialPayload)}\n\n`);
     }
@@ -180,7 +194,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
         return;
       }
       if (segments[0] === 'live') {
-        openLiveChannel(request, response, fixtureId);
+        openSseChannel(request, response, liveChannelKey(fixtureId), deps.buildLivePayload(fixtureId));
         return;
       }
       const statePayload = deps.buildStatePayload(fixtureId);
@@ -191,9 +205,26 @@ export function createFanout(deps: FanoutDeps): Fanout {
       sendJson(response, 200, statePayload);
       return;
     }
+    // Replay SSE: /replay/sessions/:sessionId/live. JSON replay routes go
+    // through handleApiRequest above; only the stream lives here.
+    if (
+      method === 'GET' &&
+      segments.length === 4 &&
+      segments[0] === 'replay' &&
+      segments[1] === 'sessions' &&
+      segments[3] === 'live'
+    ) {
+      const sessionId = segments[2] ?? '';
+      if (!deps.hasReplaySession(sessionId)) {
+        sendJson(response, 404, { error: 'unknown_session' });
+        return;
+      }
+      openSseChannel(request, response, replayChannelKey(sessionId), deps.buildReplayPayload(sessionId));
+      return;
+    }
     sendJson(response, 404, {
       error:
-        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /profile/:playerId, /receipts/:pickId, POST /players/guest, POST /picks',
+        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /leaderboard/:fixtureId, /profile/:playerId, /receipts/:pickId, POST /players/guest, POST /picks, GET /replay/tapes, POST /replay/sessions, GET /replay/sessions/:sessionId/live',
     });
   };
 
@@ -208,15 +239,15 @@ export function createFanout(deps: FanoutDeps): Fanout {
   });
 
   const keepAliveTimer = setInterval(() => {
-    for (const clients of clientsByFixture.values()) {
+    for (const clients of clientsByChannel.values()) {
       for (const client of clients) {
         client.write(': keep-alive\n\n');
       }
     }
   }, KEEP_ALIVE_INTERVAL_MS);
 
-  const broadcastEvent = (fixtureId: number, eventName: string, payload: unknown): void => {
-    const clients = clientsByFixture.get(fixtureId);
+  const broadcastToChannel = (channelKey: string, eventName: string, payload: unknown): void => {
+    const clients = clientsByChannel.get(channelKey);
     if (clients === undefined || clients.size === 0) {
       return;
     }
@@ -224,6 +255,10 @@ export function createFanout(deps: FanoutDeps): Fanout {
     for (const client of clients) {
       client.write(frame);
     }
+  };
+
+  const broadcastEvent = (fixtureId: number, eventName: string, payload: unknown): void => {
+    broadcastToChannel(liveChannelKey(fixtureId), eventName, payload);
   };
 
   const broadcast = (fixtureId: number): void => {
@@ -234,9 +269,21 @@ export function createFanout(deps: FanoutDeps): Fanout {
     broadcastEvent(fixtureId, 'state', payload);
   };
 
+  const broadcastReplayEvent = (sessionId: string, eventName: string, payload: unknown): void => {
+    broadcastToChannel(replayChannelKey(sessionId), eventName, payload);
+  };
+
+  const broadcastReplay = (sessionId: string): void => {
+    const payload = deps.buildReplayPayload(sessionId);
+    if (payload === null) {
+      return;
+    }
+    broadcastReplayEvent(sessionId, 'state', payload);
+  };
+
   const clientCount = (): number => {
     let total = 0;
-    for (const clients of clientsByFixture.values()) {
+    for (const clients of clientsByChannel.values()) {
       total += clients.size;
     }
     return total;
@@ -244,14 +291,22 @@ export function createFanout(deps: FanoutDeps): Fanout {
 
   const close = (): void => {
     clearInterval(keepAliveTimer);
-    for (const clients of clientsByFixture.values()) {
+    for (const clients of clientsByChannel.values()) {
       for (const client of clients) {
         client.end();
       }
     }
-    clientsByFixture.clear();
+    clientsByChannel.clear();
     server.close();
   };
 
-  return { server, broadcast, broadcastEvent, clientCount, close };
+  return {
+    server,
+    broadcast,
+    broadcastEvent,
+    broadcastReplay,
+    broadcastReplayEvent,
+    clientCount,
+    close,
+  };
 }

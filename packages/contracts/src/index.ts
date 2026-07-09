@@ -133,6 +133,34 @@ export interface ProfilePayload {
   bookie: BookieMargin;
 }
 
+/** One row of GET /replay/tapes: a finished match available for replay. */
+export interface ReplayTapeSummary {
+  fixtureId: number;
+  competition: string;
+  participant1: string;
+  participant2: string;
+  sizeBytes: number;
+  /** Last tape write, epoch ms; doubles as "when the match ended" roughly. */
+  updatedAtMs: number;
+}
+
+/** Replay session state, returned by the /replay/sessions endpoints. */
+export interface ReplaySessionInfo {
+  sessionId: string;
+  fixtureId: number;
+  /** Playback speed multiplier over the original arrival gaps. */
+  speed: number;
+  startedAtMs: number;
+  finished: boolean;
+  appliedEntries: number;
+  totalEntries: number;
+}
+
+/** POST /replay/sessions response. */
+export interface ReplayCreateResult {
+  session: ReplaySessionInfo;
+}
+
 /** One step of a Merkle inclusion proof (sha256, hex encoded). */
 export interface MerkleProofStep {
   siblingHashHex: string;

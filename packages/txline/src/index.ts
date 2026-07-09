@@ -5,3 +5,4 @@ export * from './http.js';
 export * from './auth.js';
 export * from './rest.js';
 export * from './sse.js';
+export * from './oracle.js';

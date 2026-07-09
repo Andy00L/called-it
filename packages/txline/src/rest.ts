@@ -1,7 +1,7 @@
 import type { TxlineNetworkConfig } from './config.js';
 import { apiGetJson, type AuthHeaders } from './http.js';
 import type { Result } from './result.js';
-import type { Fixture, OddsPayload, ScoresUpdate } from './types.js';
+import type { Fixture, OddsPayload, ScoresStatValidation, ScoresUpdate } from './types.js';
 
 /** GET /api/fixtures/snapshot : latest fixtures within a 30 day window. */
 export function fetchFixturesSnapshot(
@@ -65,6 +65,39 @@ export function fetchScoresHistorical(
   fixtureId: number,
 ): Promise<Result<ScoresUpdate[]>> {
   return apiGetJson<ScoresUpdate[]>(cfg, `/scores/historical/${fixtureId}`, auth);
+}
+
+export interface StatValidationQuery {
+  fixtureId: number;
+  /** Sequence number of the scores event whose stats are being proven. */
+  seq: number;
+  statKey: number;
+  /** Optional second stat of the same event (two-stat predicates). */
+  statKey2?: number;
+}
+
+/**
+ * GET /api/scores/stat-validation : Merkle proofs connecting one or two stats
+ * of a scores event to the daily batch root published on-chain (Txoracle).
+ */
+export function fetchScoresStatValidation(
+  cfg: TxlineNetworkConfig,
+  auth: AuthHeaders,
+  query: StatValidationQuery,
+): Promise<Result<ScoresStatValidation>> {
+  const parameters = new URLSearchParams({
+    fixtureId: String(query.fixtureId),
+    seq: String(query.seq),
+    statKey: String(query.statKey),
+  });
+  if (query.statKey2 !== undefined) {
+    parameters.set('statKey2', String(query.statKey2));
+  }
+  return apiGetJson<ScoresStatValidation>(
+    cfg,
+    `/scores/stat-validation?${parameters.toString()}`,
+    auth,
+  );
 }
 
 export function scoresStreamUrl(cfg: TxlineNetworkConfig): string {

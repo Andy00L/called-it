@@ -148,6 +148,52 @@ export interface ScoresUpdate {
   Participant1IsHome?: boolean;
 }
 
+/**
+ * Merkle proof material served by GET /api/scores/stat-validation, used to
+ * call Txoracle validate_stat on-chain (read-only .view()). The spec marks
+ * binary fields as strings, but the live API serves raw JSON byte arrays
+ * (verified on mainnet 2026-07-09); both shapes are accepted.
+ */
+export type OracleBinary = number[] | string;
+
+export interface OracleProofNode {
+  hash: OracleBinary;
+  isRightSibling: boolean;
+}
+
+/** One provable key-value statistic; key encodes (period * 1000) + base_key. */
+export interface OracleScoreStat {
+  key: number;
+  value: number;
+  period: number;
+}
+
+export interface OracleScoresUpdateStats {
+  updateCount: number;
+  minTimestamp: number;
+  maxTimestamp: number;
+}
+
+export interface OracleScoresBatchSummary {
+  fixtureId: number;
+  updateStats: OracleScoresUpdateStats;
+  eventStatsSubTreeRoot: OracleBinary;
+}
+
+/** Response of GET /api/scores/stat-validation (legacy one or two stat mode). */
+export interface ScoresStatValidation {
+  ts: number;
+  statToProve: OracleScoreStat;
+  eventStatRoot: OracleBinary;
+  summary: OracleScoresBatchSummary;
+  /** List_ProofNode is nullable in the spec (Nil variant). */
+  statProof: OracleProofNode[] | null;
+  subTreeProof: OracleProofNode[] | null;
+  mainTreeProof: OracleProofNode[] | null;
+  statToProve2?: OracleScoreStat;
+  statProof2?: OracleProofNode[] | null;
+}
+
 /** Parsed SSE frame before JSON decoding of data. */
 export interface SseFrame {
   id?: string;

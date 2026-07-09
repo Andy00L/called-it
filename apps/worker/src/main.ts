@@ -11,6 +11,7 @@ import { createMemoPoster } from './memo-poster.js';
 import { createSupabaseHeartbeat } from './heartbeat.js';
 import { createLatencyTracker, recordLatency, snapshotLatency } from './latency.js';
 import { buildLivePayloadForState } from './live-payload.js';
+import { createOracleVerifier } from './oracle-verify.js';
 import { createReplayManager, type ReplayManager } from './replay.js';
 import {
   applyOddsPayload,
@@ -245,6 +246,21 @@ async function main(): Promise<void> {
     },
   });
 
+  // Oracle cross-check needs the wallet only as a read-only view signer;
+  // absent wallet = the receipt field stays null (documented in contracts).
+  const oracleVerifier =
+    env.walletSecret === undefined
+      ? null
+      : createOracleVerifier({
+          cfg: env.cfg,
+          sharedAuth,
+          rpcUrl: env.rpcUrl,
+          walletSecret: env.walletSecret,
+        });
+  if (oracleVerifier === null) {
+    console.warn('[main] no wallet configured: oracle verification is OFF');
+  }
+
   const buildReceipt = async (pickId: string): Promise<Result<ReceiptPayload | null, string>> => {
     const fetched = await persistence.getReceipt(pickId);
     if (!fetched.ok) {
@@ -260,10 +276,17 @@ async function main(): Promise<void> {
     const leafHashHex = hashPickLeaf(record.pick);
     const hasProof =
       record.commitment !== null && record.proof !== null && record.leafIndex !== null;
+    // Only settled picks get the oracle cross-check: pending outcomes have
+    // no final stats to prove yet.
+    const oracleVerification =
+      record.settlement === null || oracleVerifier === null
+        ? null
+        : await oracleVerifier.verifyCategory(record.pick.fixtureId, record.pick.category);
     return ok({
       pick: record.pick,
       playerHandle: record.playerHandle,
       settlement: record.settlement,
+      oracleVerification,
       commitment:
         record.commitment === null || record.proof === null || record.leafIndex === null
           ? null

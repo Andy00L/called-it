@@ -7,18 +7,21 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts src/fixtures.test.ts src/commitments.test.ts src/heartbeat.test.ts src/replay.test.ts"
+    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts src/fixtures.test.ts src/commitments.test.ts src/heartbeat.test.ts src/replay.test.ts src/oracle-verify.test.ts"
   },
   "dependencies": {
     "@calledit/contracts": "workspace:*",
     "@calledit/engine": "workspace:*",
     "@calledit/txline": "workspace:*",
+    "@coral-xyz/anchor": "^0.31.1",
     "@solana/spl-memo": "^0.2.5",
     "@solana/web3.js": "^1.98.4",
     "@supabase/supabase-js": "^2.110.0",
+    "bn.js": "^5.2.4",
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.0"

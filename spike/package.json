@@ -11,17 +11,20 @@
     "activate": "tsx src/03-activate.ts",
     "snapshots": "tsx src/04-snapshots.ts",
     "stream:scores": "tsx src/05-stream-scores.ts",
-    "stream:odds": "tsx src/06-stream-odds.ts"
+    "stream:odds": "tsx src/06-stream-odds.ts",
+    "statval": "tsx src/08-stat-validation.ts"
   },
   "dependencies": {
     "@calledit/txline": "workspace:*",
     "@coral-xyz/anchor": "^0.31.1",
     "@solana/spl-token": "^0.4.9",
     "@solana/web3.js": "^1.98.0",
+    "bn.js": "^5.2.4",
     "dotenv": "^16.4.7",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.0"

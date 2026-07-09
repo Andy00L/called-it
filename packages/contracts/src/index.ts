@@ -180,6 +180,34 @@ export interface PickCommitment {
   committedAtMs: number;
 }
 
+export type OracleVerificationStatus = 'verified' | 'mismatch' | 'pending' | 'unavailable';
+
+/** One final stat pair proven against TxODDS's on-chain daily root. */
+export interface OracleProvenFinal {
+  label: string;
+  p1: number;
+  p2: number;
+}
+
+/**
+ * Result of cross-checking the fixture's final stats against the Txoracle
+ * program (validate_stat .view(), read-only). 'verified' = the finals the
+ * receipt shows recompute to true against the on-chain Merkle root;
+ * 'pending' = the daily root is not posted yet; 'mismatch' should never
+ * happen and is surfaced loudly.
+ */
+export interface OracleVerification {
+  status: OracleVerificationStatus;
+  /** Distinct machine-readable reason when status is not 'verified'. */
+  reason?: string;
+  checkedAtMs: number;
+  epochDay?: number;
+  provenFinals?: OracleProvenFinal[];
+  /** Scores event the proof anchors to (newest scored record). */
+  eventSeq?: number;
+  eventTs?: number;
+}
+
 /** GET /receipts/:pickId response: everything the public receipt shows. */
 export interface ReceiptPayload {
   pick: PickRecord;
@@ -188,6 +216,8 @@ export interface ReceiptPayload {
   commitment: PickCommitment | null;
   /** Worker-side re-verification: leaf + proof recomputes the root. */
   proofValid: boolean | null;
+  /** TxODDS oracle cross-check; null when the pick is unsettled or the verifier is off. */
+  oracleVerification: OracleVerification | null;
   fixture: { participant1: string; participant2: string; competition: string } | null;
   network: 'mainnet' | 'devnet';
 }

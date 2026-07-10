@@ -17,10 +17,16 @@ export function formatProbability(fraction: number): string {
   return `${(fraction * 100).toFixed(1)}%`;
 }
 
-/** Kickoff time in the viewer's locale and timezone. */
+// Six days: within a week a short weekday is unambiguous; past that the row
+// needs the calendar date (a friendly two months out read as this "Fri").
+const KICKOFF_WEEKDAY_ONLY_WINDOW_MS = 6 * 24 * 60 * 60 * 1000;
+
+/** Kickoff time in the viewer's locale and timezone; dated beyond a week. */
 export function formatKickoff(startTimeMs: number): string {
+  const needsDate = startTimeMs - Date.now() >= KICKOFF_WEEKDAY_ONLY_WINDOW_MS;
   return new Intl.DateTimeFormat(undefined, {
     weekday: 'short',
+    ...(needsDate ? { month: 'short', day: 'numeric' } : {}),
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(startTimeMs));

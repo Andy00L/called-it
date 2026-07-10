@@ -28,6 +28,7 @@ import { readWorkerEnv } from './env.js';
 import { createGameService, type GameService } from './game.js';
 import { createMemoryPersistence } from './persistence-memory.js';
 import { createSupabasePersistence } from './persistence-supabase.js';
+import { createWalletVerifier } from './wallet-auth.js';
 
 // Milliseconds the clean shutdown gets before the process force-exits 0.
 // Railway marks an instance crashed when it outlives the stop grace period,
@@ -50,8 +51,19 @@ function statusForGameError(code: string): number {
   if (code === 'unknown_fixture' || code === 'unknown_option' || code === 'unknown_player') {
     return 404;
   }
-  if (code === 'duplicate_category' || code === 'not_in_running' || code === 'window_too_short') {
+  if (
+    code === 'duplicate_category' ||
+    code === 'not_in_running' ||
+    code === 'window_too_short' ||
+    code === 'wallet_taken'
+  ) {
     return 409;
+  }
+  if (code === 'wallet_unlinked') {
+    return 404;
+  }
+  if (code === 'challenge_expired' || code === 'signature_mismatch') {
+    return 401;
   }
   if (code.startsWith('invalid_')) {
     return 400;
@@ -168,6 +180,39 @@ function buildApiHandler(game: GameService, receipts: ReceiptSource, replay: Rep
       return { status: 200, body: renamed.value };
     }
 
+    if (method === 'POST' && segments.length === 2 && segments[0] === 'players' && segments[1] === 'challenge') {
+      // Fresh single-use challenge for the optional wallet link; no auth needed.
+      return { status: 200, body: game.issueWalletChallenge() };
+    }
+
+    if (method === 'POST' && segments.length === 2 && segments[0] === 'players' && segments[1] === 'wallet-link') {
+      const record = asRecord(body);
+      const linked = await game.linkWallet(
+        firstHeaderValue(headers['x-player-id']),
+        firstHeaderValue(headers['x-player-token']),
+        record['walletPubkey'],
+        record['nonce'],
+        record['signature'],
+      );
+      if (!linked.ok) {
+        return { status: statusForGameError(linked.error), body: { error: linked.error } };
+      }
+      return { status: 200, body: linked.value };
+    }
+
+    if (method === 'POST' && segments.length === 2 && segments[0] === 'players' && segments[1] === 'wallet-restore') {
+      const record = asRecord(body);
+      const restored = await game.restoreWallet(
+        record['walletPubkey'],
+        record['nonce'],
+        record['signature'],
+      );
+      if (!restored.ok) {
+        return { status: statusForGameError(restored.error), body: { error: restored.error } };
+      }
+      return { status: 200, body: restored.value };
+    }
+
     if (method === 'POST' && segments.length === 1 && segments[0] === 'picks') {
       const bodyRecord = asRecord(body);
       const locked = await game.lockPick(
@@ -262,9 +307,11 @@ async function main(): Promise<void> {
       : buildLivePayloadForState(state, scoresLatency, oddsLatency);
   };
 
+  const walletVerifier = createWalletVerifier();
   const game = createGameService({
     persistence,
     store,
+    walletVerifier,
     onSettlement: (notice) => {
       fanout.broadcastEvent(notice.fixtureId, 'settlement', notice);
     },

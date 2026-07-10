@@ -28,8 +28,13 @@ import type {
   PickRecord,
   PlayerRecord,
 } from './persistence.js';
-import { PERSISTENCE_ERROR_DUPLICATE_CATEGORY, PERSISTENCE_ERROR_NOT_PENDING } from './persistence.js';
+import {
+  PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
+  PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_WALLET_TAKEN,
+} from './persistence.js';
 import { getMatchState, isInRunning, type MatchState, type MatchStateStore } from './state.js';
+import type { WalletChallenge, WalletVerifier } from './wallet-auth.js';
 
 /**
  * The game service: guest players, pick locking with The Bookie's ghost
@@ -60,6 +65,8 @@ export type { GuestSession, LockResult, ProfilePayload, SettlementNotice };
 export interface GameServiceDeps {
   persistence: PersistencePort;
   store: MatchStateStore;
+  /** Verifies wallet-ownership challenges for the optional profile link. */
+  walletVerifier: WalletVerifier;
   /** Called after each successful settlement (SSE fan-out). */
   onSettlement?: (notice: SettlementNotice) => void;
   /** Injectable clock for tests; defaults to Date.now. */
@@ -84,6 +91,22 @@ export interface GameService {
   leaderboardGlobal(): Promise<Result<LeaderboardEntry[], string>>;
   leaderboardFixture(fixtureId: number): Promise<Result<FixtureLeaderboardEntry[], string>>;
   profile(rawPlayerId: unknown): Promise<Result<ProfilePayload, string>>;
+  /** Issue a fresh single-use wallet-ownership challenge to sign. */
+  issueWalletChallenge(): WalletChallenge;
+  /** Link a wallet to the authenticated guest (claim their profile). */
+  linkWallet(
+    rawPlayerId: unknown,
+    rawPlayerToken: unknown,
+    rawWalletPubkey: unknown,
+    rawNonce: unknown,
+    rawSignature: unknown,
+  ): Promise<Result<{ walletPubkey: string }, string>>;
+  /** Restore the guest that owns a wallet, issuing it a fresh token. */
+  restoreWallet(
+    rawWalletPubkey: unknown,
+    rawNonce: unknown,
+    rawSignature: unknown,
+  ): Promise<Result<GuestSession, string>>;
   pendingPickCount(): number;
 }
 
@@ -474,7 +497,60 @@ export function createGameService(deps: GameServiceDeps): GameService {
         marketBrierScore: marketBrierScore(humanSlate),
         calibration: calibrationBuckets(humanSlate),
         bookie: computeBookieMargin(humanSlate, ghostSlate),
+        walletPubkey: player.walletPubkey,
       });
+    },
+
+    issueWalletChallenge: () => deps.walletVerifier.issueChallenge(),
+
+    linkWallet: async (rawPlayerId, rawPlayerToken, rawWalletPubkey, rawNonce, rawSignature) => {
+      if (typeof rawPlayerId !== 'string' || typeof rawPlayerToken !== 'string') {
+        return err('auth_failed');
+      }
+      const authenticated = await authenticate(rawPlayerId, rawPlayerToken);
+      if (!authenticated.ok) {
+        return authenticated;
+      }
+      const verified = deps.walletVerifier.verify(rawNonce, rawWalletPubkey, rawSignature);
+      if (!verified.ok) {
+        return verified;
+      }
+      const linked = await deps.persistence.linkWallet(
+        authenticated.value.id,
+        verified.value.walletPubkey,
+      );
+      if (!linked.ok) {
+        if (linked.error.startsWith(PERSISTENCE_ERROR_WALLET_TAKEN)) {
+          return err('wallet_taken');
+        }
+        return linked;
+      }
+      return ok({ walletPubkey: verified.value.walletPubkey });
+    },
+
+    restoreWallet: async (rawWalletPubkey, rawNonce, rawSignature) => {
+      const verified = deps.walletVerifier.verify(rawNonce, rawWalletPubkey, rawSignature);
+      if (!verified.ok) {
+        return verified;
+      }
+      const found = await deps.persistence.getPlayerByWallet(verified.value.walletPubkey);
+      if (!found.ok) {
+        return found;
+      }
+      if (found.value === null) {
+        return err('wallet_unlinked');
+      }
+      // Proving wallet ownership issues a FRESH token bound to the same player,
+      // rotating the old one (the new device becomes the session).
+      const playerToken = `${randomUUID()}${randomUUID()}`;
+      const rotated = await deps.persistence.rotatePlayerToken(
+        found.value.id,
+        hashPlayerToken(playerToken),
+      );
+      if (!rotated.ok) {
+        return rotated;
+      }
+      return ok({ playerId: found.value.id, playerToken, handle: found.value.handle });
     },
 
     pendingPickCount: () => {

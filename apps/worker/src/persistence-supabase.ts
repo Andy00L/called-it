@@ -4,6 +4,7 @@ import { err, ok, type Result } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_WALLET_TAKEN,
   type CommitmentRecord,
   type FixtureLeaderboardEntry,
   type LeaderboardEntry,
@@ -31,6 +32,7 @@ interface PlayerRow {
   total_points: number;
   current_streak: number;
   best_streak: number;
+  wallet_pubkey: string | null;
 }
 
 interface PickRow {
@@ -86,6 +88,7 @@ function playerFromRow(row: PlayerRow): PlayerRecord {
     totalPoints: row.total_points,
     currentStreak: row.current_streak,
     bestStreak: row.best_streak,
+    walletPubkey: row.wallet_pubkey ?? null,
   };
 }
 
@@ -203,10 +206,47 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
       return ok(data === null ? null : playerFromRow(data as PlayerRow));
     },
 
+    getPlayerByWallet: async (walletPubkey) => {
+      const { data, error } = await client
+        .from('players')
+        .select('*')
+        .eq('wallet_pubkey', walletPubkey)
+        .maybeSingle();
+      if (error !== null) {
+        return err(`players by wallet select failed: ${error.message}`);
+      }
+      return ok(data === null ? null : playerFromRow(data as PlayerRow));
+    },
+
     updatePlayerHandle: async (playerId, handle) => {
       const { error } = await client.from('players').update({ handle }).eq('id', playerId);
       if (error !== null) {
         return err(`players update failed: ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
+    linkWallet: async (playerId, walletPubkey) => {
+      const { error } = await client
+        .from('players')
+        .update({ wallet_pubkey: walletPubkey })
+        .eq('id', playerId);
+      if (error !== null) {
+        if (error.code === POSTGRES_UNIQUE_VIOLATION) {
+          return err(`${PERSISTENCE_ERROR_WALLET_TAKEN}: ${walletPubkey}`);
+        }
+        return err(`wallet link failed: ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
+    rotatePlayerToken: async (playerId, tokenHash) => {
+      const { error } = await client
+        .from('players')
+        .update({ token_hash: tokenHash })
+        .eq('id', playerId);
+      if (error !== null) {
+        return err(`token rotate failed: ${error.message}`);
       }
       return ok(undefined);
     },

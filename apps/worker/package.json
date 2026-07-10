@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts src/fixtures.test.ts src/commitments.test.ts src/heartbeat.test.ts src/replay.test.ts src/oracle-verify.test.ts src/rate-limit.test.ts"
+    "test": "node --import tsx --test src/tape.test.ts src/latency.test.ts src/state.test.ts src/game.test.ts src/fixtures.test.ts src/commitments.test.ts src/heartbeat.test.ts src/replay.test.ts src/oracle-verify.test.ts src/rate-limit.test.ts src/wallet-auth.test.ts"
   },
   "dependencies": {
     "@calledit/contracts": "workspace:*",
@@ -18,7 +18,8 @@
     "@solana/web3.js": "^1.98.4",
     "@supabase/supabase-js": "^2.110.0",
     "bn.js": "^5.2.4",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/bn.js": "^5.2.0",

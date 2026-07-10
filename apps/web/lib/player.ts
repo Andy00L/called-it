@@ -48,6 +48,11 @@ export function updateStoredHandle(handle: string): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...stored, handle }));
 }
 
+/** Persist a session obtained out of band (a wallet restore on a new device). */
+export function storeSession(session: GuestSession): void {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+}
+
 function generateHandle(): string {
   // Handle constraint: 2 to 24 chars of letters/numbers/space/_ . - (game.ts).
   return `Fan ${Math.floor(1000 + Math.random() * 9000)}`;

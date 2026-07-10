@@ -23,6 +23,7 @@ import {
 } from './state.js';
 import { createGameService, type GameService } from './game.js';
 import { createMemoryPersistence } from './persistence-memory.js';
+import { createWalletVerifier } from './wallet-auth.js';
 import { createLatencyTracker, recordLatency, type LatencyTracker } from './latency.js';
 import { buildLivePayloadForState } from './live-payload.js';
 
@@ -136,6 +137,9 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
   const scheduler = deps.scheduler ?? TIMER_SCHEDULER;
   const sessions = new Map<string, ReplaySession>();
   let sweepTimer: NodeJS.Timeout | null = null;
+  // Replay games never link wallets, but the game service requires a verifier;
+  // one shared instance satisfies the dependency without any wallet surface.
+  const replayWalletVerifier = createWalletVerifier({ nowMs });
 
   const describeSession = (session: ReplaySession): ReplaySessionInfo => ({
     sessionId: session.id,
@@ -379,6 +383,7 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
       const game = createGameService({
         persistence: createMemoryPersistence(),
         store,
+        walletVerifier: replayWalletVerifier,
         onSettlement: (notice) => deps.onSettlement(sessionId, notice),
         nowMs,
       });

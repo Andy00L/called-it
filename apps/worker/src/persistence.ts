@@ -26,6 +26,8 @@ export interface PlayerRecord {
   totalPoints: number;
   currentStreak: number;
   bestStreak: number;
+  /** Linked Solana wallet (base58), or null when the profile is guest-only. */
+  walletPubkey: string | null;
 }
 
 export type { FixtureLeaderboardEntry, LeaderboardEntry, PickRecord, PickStatus };
@@ -78,13 +80,20 @@ export interface ReceiptRecord {
 // Stable error codes adapters prefix their error strings with.
 export const PERSISTENCE_ERROR_DUPLICATE_CATEGORY = 'duplicate_category';
 export const PERSISTENCE_ERROR_NOT_PENDING = 'not_pending';
+export const PERSISTENCE_ERROR_WALLET_TAKEN = 'wallet_taken';
 
 export interface PersistencePort {
   describeBackend(): string;
   createPlayer(handle: string, tokenHash: string): Promise<Result<PlayerRecord, string>>;
   getPlayer(playerId: string): Promise<Result<PlayerRecord | null, string>>;
+  /** Find a player by their linked wallet (base58); null when unlinked. */
+  getPlayerByWallet(walletPubkey: string): Promise<Result<PlayerRecord | null, string>>;
   /** Rename a player; leaderboards and receipts read the handle live. */
   updatePlayerHandle(playerId: string, handle: string): Promise<Result<void, string>>;
+  /** Link a wallet to a player; `wallet_taken` when another player owns it. */
+  linkWallet(playerId: string, walletPubkey: string): Promise<Result<void, string>>;
+  /** Rotate a player's token hash (wallet restore issues a fresh token). */
+  rotatePlayerToken(playerId: string, tokenHash: string): Promise<Result<void, string>>;
   /** Insert the human pick and its ghost mirror in one atomic write. */
   insertPickPair(
     humanPick: PickRecord,

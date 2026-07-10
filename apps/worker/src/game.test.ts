@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { PublicKey } from '@solana/web3.js';
+import nacl from 'tweetnacl';
 import { generateCalls, type CallOption } from '@calledit/engine';
 import { err, type OddsPayload, type ScoresUpdate } from '@calledit/txline';
 import { createGameService, type SettlementNotice } from './game.js';
 import { createMemoryPersistence } from './persistence-memory.js';
 import type { PersistencePort } from './persistence.js';
+import { createWalletVerifier } from './wallet-auth.js';
 import {
   applyOddsPayload,
   applyScoresUpdate,
@@ -47,6 +50,7 @@ function createHarness(): TestHarness {
   const game = createGameService({
     persistence,
     store,
+    walletVerifier: createWalletVerifier(),
     onSettlement: (notice) => notices.push(notice),
   });
   return { store, persistence, game, notices };
@@ -399,6 +403,7 @@ test('a transient settlement failure keeps the pick pending for the next pass', 
   const game = createGameService({
     persistence,
     store,
+    walletVerifier: createWalletVerifier(),
     onSettlement: (notice) => notices.push(notice),
   });
   const harness: TestHarness = { store, persistence, game, notices };
@@ -431,6 +436,108 @@ test('a transient settlement failure keeps the pick pending for the next pass', 
   player = await harness.persistence.getPlayer(guest.playerId);
   assert.ok(player.ok && player.value !== null);
   assert.equal(player.value.totalPoints, corner.potentialPoints);
+});
+
+function signChallenge(message: string, secretKey: Uint8Array): string {
+  return Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), secretKey)).toString(
+    'base64',
+  );
+}
+
+test('a player links a wallet, then restores the profile on a fresh token', async () => {
+  const harness = createHarness();
+  const guest = await createGuest(harness, 'wallet fan');
+  const keyPair = nacl.sign.keyPair();
+  const walletPubkey = new PublicKey(keyPair.publicKey).toBase58();
+
+  const challenge = harness.game.issueWalletChallenge();
+  const linked = await harness.game.linkWallet(
+    guest.playerId,
+    guest.playerToken,
+    walletPubkey,
+    challenge.nonce,
+    signChallenge(challenge.message, keyPair.secretKey),
+  );
+  assert.ok(linked.ok && linked.value.walletPubkey === walletPubkey);
+
+  const profile = await harness.game.profile(guest.playerId);
+  assert.ok(profile.ok && profile.value.walletPubkey === walletPubkey);
+
+  // Restore on a "new device": prove ownership, get the same player + new token.
+  const restoreChallenge = harness.game.issueWalletChallenge();
+  const restored = await harness.game.restoreWallet(
+    walletPubkey,
+    restoreChallenge.nonce,
+    signChallenge(restoreChallenge.message, keyPair.secretKey),
+  );
+  assert.ok(restored.ok);
+  assert.equal(restored.value.playerId, guest.playerId);
+  assert.equal(restored.value.handle, 'wallet fan');
+  assert.notEqual(restored.value.playerToken, guest.playerToken);
+
+  // The rotated token authenticates; the old token no longer does.
+  const withNew = await harness.game.renameHandle(
+    guest.playerId,
+    restored.value.playerToken,
+    'new device name',
+  );
+  assert.ok(withNew.ok);
+  const withOld = await harness.game.renameHandle(guest.playerId, guest.playerToken, 'nope');
+  assert.ok(!withOld.ok && withOld.error === 'auth_failed');
+});
+
+test('a wallet already linked to another player is refused', async () => {
+  const harness = createHarness();
+  const first = await createGuest(harness, 'first');
+  const second = await createGuest(harness, 'second');
+  const keyPair = nacl.sign.keyPair();
+  const walletPubkey = new PublicKey(keyPair.publicKey).toBase58();
+
+  const firstChallenge = harness.game.issueWalletChallenge();
+  const firstLink = await harness.game.linkWallet(
+    first.playerId,
+    first.playerToken,
+    walletPubkey,
+    firstChallenge.nonce,
+    signChallenge(firstChallenge.message, keyPair.secretKey),
+  );
+  assert.ok(firstLink.ok);
+
+  const secondChallenge = harness.game.issueWalletChallenge();
+  const secondLink = await harness.game.linkWallet(
+    second.playerId,
+    second.playerToken,
+    walletPubkey,
+    secondChallenge.nonce,
+    signChallenge(secondChallenge.message, keyPair.secretKey),
+  );
+  assert.ok(!secondLink.ok && secondLink.error === 'wallet_taken');
+});
+
+test('restoring an unlinked wallet and linking with a bad signature are distinct failures', async () => {
+  const harness = createHarness();
+  const guest = await createGuest(harness);
+  const owner = nacl.sign.keyPair();
+  const walletPubkey = new PublicKey(owner.publicKey).toBase58();
+
+  const restoreChallenge = harness.game.issueWalletChallenge();
+  const restore = await harness.game.restoreWallet(
+    walletPubkey,
+    restoreChallenge.nonce,
+    signChallenge(restoreChallenge.message, owner.secretKey),
+  );
+  assert.ok(!restore.ok && restore.error === 'wallet_unlinked');
+
+  const linkChallenge = harness.game.issueWalletChallenge();
+  const forged = signChallenge(linkChallenge.message, nacl.sign.keyPair().secretKey);
+  const badLink = await harness.game.linkWallet(
+    guest.playerId,
+    guest.playerToken,
+    walletPubkey,
+    linkChallenge.nonce,
+    forged,
+  );
+  assert.ok(!badLink.ok && badLink.error === 'signature_mismatch');
 });
 
 test('a finished match sweeps every remaining pick to its final verdict', async () => {

@@ -2,6 +2,7 @@ import { err, ok } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_WALLET_TAKEN,
   type CommitmentRecord,
   type FixtureLeaderboardEntry,
   type LeaderboardEntry,
@@ -77,6 +78,7 @@ export function createMemoryPersistence(): PersistencePort {
         totalPoints: 0,
         currentStreak: 0,
         bestStreak: 0,
+        walletPubkey: null,
       };
       players.set(player.id, player);
       return ok(player);
@@ -84,12 +86,44 @@ export function createMemoryPersistence(): PersistencePort {
 
     getPlayer: async (playerId) => ok(players.get(playerId) ?? null),
 
+    getPlayerByWallet: async (walletPubkey) => {
+      for (const player of players.values()) {
+        if (player.walletPubkey === walletPubkey) {
+          return ok(player);
+        }
+      }
+      return ok(null);
+    },
+
     updatePlayerHandle: async (playerId, handle) => {
       const player = players.get(playerId);
       if (player === undefined) {
         return err(`players update failed: unknown player ${playerId}`);
       }
       player.handle = handle;
+      return ok(undefined);
+    },
+
+    linkWallet: async (playerId, walletPubkey) => {
+      const player = players.get(playerId);
+      if (player === undefined) {
+        return err(`players update failed: unknown player ${playerId}`);
+      }
+      for (const other of players.values()) {
+        if (other.id !== playerId && other.walletPubkey === walletPubkey) {
+          return err(`${PERSISTENCE_ERROR_WALLET_TAKEN}: ${walletPubkey}`);
+        }
+      }
+      player.walletPubkey = walletPubkey;
+      return ok(undefined);
+    },
+
+    rotatePlayerToken: async (playerId, tokenHash) => {
+      const player = players.get(playerId);
+      if (player === undefined) {
+        return err(`players update failed: unknown player ${playerId}`);
+      }
+      player.tokenHash = tokenHash;
       return ok(undefined);
     },
 

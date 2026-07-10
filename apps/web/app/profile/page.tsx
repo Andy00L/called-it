@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { GuestSession, ProfilePayload } from '@calledit/contracts';
-import { readStoredSession } from '../../lib/player';
+import { readStoredSession, storeSession } from '../../lib/player';
 import { getProfile } from '../../lib/game-api';
 import { EmptyState } from '../../components/ui/empty-state';
 import { Skeleton } from '../../components/ui/skeleton';
@@ -15,6 +15,7 @@ import { IdentityCard } from '../../components/profile/identity-card';
 import { StatsCards } from '../../components/profile/stats-cards';
 import { BookieDuel } from '../../components/profile/bookie-duel';
 import { CalibrationCard } from '../../components/profile/calibration-card';
+import { WalletClaim, WalletRestore } from '../../components/profile/wallet-claim';
 
 type ProfileView =
   | { kind: 'loading' }
@@ -126,17 +127,25 @@ export default function ProfilePage() {
       {view.kind === 'loading' ? (
         <LoadingLayout />
       ) : view.kind === 'no_identity' ? (
-        <Tray className="p-2">
-          <EmptyState
-            motif="flag"
-            title="Lock your first call during a live match"
-            action={
-              <Link href="/" className={buttonClassName('primary')}>
-                See live matches
-              </Link>
-            }
+        <>
+          <Tray className="p-2">
+            <EmptyState
+              motif="flag"
+              title="Lock your first call during a live match"
+              action={
+                <Link href="/" className={buttonClassName('primary')}>
+                  See live matches
+                </Link>
+              }
+            />
+          </Tray>
+          <WalletRestore
+            onRestored={(session) => {
+              storeSession(session);
+              setReloadCount((count) => count + 1);
+            }}
           />
-        </Tray>
+        </>
       ) : view.kind === 'error' ? (
         <Tray className="p-2">
           <EmptyState
@@ -160,6 +169,13 @@ export default function ProfilePage() {
               profile: { ...view.profile, handle },
             });
           }}
+          onWalletLinked={(walletPubkey) => {
+            setView({
+              kind: 'ready',
+              session: view.session,
+              profile: { ...view.profile, walletPubkey },
+            });
+          }}
         />
       )}
     </main>
@@ -170,10 +186,12 @@ function ProfileBody({
   session,
   profile,
   onRenamed,
+  onWalletLinked,
 }: {
   session: GuestSession;
   profile: ProfilePayload;
   onRenamed: (handle: string) => void;
+  onWalletLinked: (walletPubkey: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -182,6 +200,12 @@ function ProfileBody({
         handle={profile.handle}
         settledPickCount={profile.settledPickCount}
         onRenamed={onRenamed}
+      />
+
+      <WalletClaim
+        session={session}
+        walletPubkey={profile.walletPubkey}
+        onLinked={onWalletLinked}
       />
 
       {profile.settledPickCount === 0 ? (

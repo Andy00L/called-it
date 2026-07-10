@@ -1,59 +1,93 @@
 import Link from 'next/link';
 import type { FixtureSummary } from '@calledit/contracts';
 import { Badge } from '../ui/badge';
-import { Surface } from '../ui/surface';
-import { ProbabilityPulse } from '../match/probability-pulse';
-import { formatClockMinutes, formatKickoff } from '../../lib/format';
+import { Eyebrow } from '../ui/eyebrow';
+import { favoredSide, ProbabilityPulse } from '../match/probability-pulse';
+import { formatClockMmSs, formatKickoff } from '../../lib/format';
 
-function PhaseBadge({ fixture }: { fixture: FixtureSummary }) {
-  if (fixture.phase === 'live') {
-    return <Badge tone="live">Live {formatClockMinutes(fixture.clockSeconds)}</Badge>;
+/**
+ * Lobby rows (screen 02): live matches are link rows with the 2px pulse
+ * echo; upcoming matches are quiet rows with a kickoff time. Rows sit in
+ * one white card, separated by dashed hairlines in the parent.
+ */
+
+function favoriteName(fixture: FixtureSummary): { name: string; pct: string } | null {
+  if (fixture.matchResult === null) {
+    return null;
   }
-  if (fixture.phase === 'finished') {
-    return <Badge tone="finished">Full time</Badge>;
-  }
-  return (
-    <Badge tone="neutral">
-      {fixture.startTimeMs > 0 ? formatKickoff(fixture.startTimeMs) : 'Scheduled'}
-    </Badge>
-  );
+  const side = favoredSide(fixture.matchResult);
+  const name =
+    side === 'p1' ? fixture.participant1 : side === 'p2' ? fixture.participant2 : 'draw';
+  const fraction =
+    side === 'p1'
+      ? fixture.matchResult.p1
+      : side === 'p2'
+        ? fixture.matchResult.p2
+        : fixture.matchResult.draw;
+  return { name, pct: (fraction * 100).toFixed(1) };
 }
 
-export function FixtureCard({ fixture }: { fixture: FixtureSummary }) {
-  const showsScore = fixture.phase !== 'pre';
+export function LiveFixtureRow({ fixture }: { fixture: FixtureSummary }) {
+  const favorite = favoriteName(fixture);
   return (
     <Link
       href={`/match/${fixture.fixtureId}`}
-      className="block transition-transform duration-[var(--duration-small)] ease-[var(--ease-standard)] hover:-translate-y-0.5"
+      aria-label={`${fixture.participant1} vs ${fixture.participant2}, live, ${fixture.goalsP1}-${fixture.goalsP2}`}
+      className="block rounded-[6px] bg-card p-4 text-ink transition-[transform,box-shadow] duration-[var(--duration-small)] ease-[var(--ease-standard)] hover:-translate-y-0.5 hover:[box-shadow:var(--shadow-float)] active:scale-[0.99] sm:px-4.5"
     >
-      <Surface className="flex flex-col gap-3 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs uppercase tracking-[0.08em] text-ink-faint">
-            {fixture.competition}
-          </span>
-          <PhaseBadge fixture={fixture} />
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <Eyebrow size="sm">{fixture.competition}</Eyebrow>
+          <h3 className="mt-2 truncate text-xl font-medium tracking-[-0.03em]">
+            {fixture.participant1} vs {fixture.participant2}
+          </h3>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-1 text-base font-semibold">
-            <span className="truncate">{fixture.participant1}</span>
-            <span className="truncate">{fixture.participant2}</span>
+        <div className="flex flex-none flex-col items-end gap-2">
+          <div className="flex items-baseline gap-2.5">
+            <span className="tabular font-mono text-xl font-semibold">
+              {fixture.goalsP1} - {fixture.goalsP2}
+            </span>
+            <span className="tabular font-mono text-[13px] text-ink-muted">
+              {formatClockMmSs(fixture.clockSeconds)}
+            </span>
           </div>
-          {showsScore ? (
-            <div className="tabular flex flex-col items-end gap-1 font-mono text-2xl">
-              <span>{fixture.goalsP1}</span>
-              <span>{fixture.goalsP2}</span>
-            </div>
+          <Badge tone="live">live</Badge>
+        </div>
+      </div>
+      {fixture.matchResult !== null ? (
+        <div className="mt-3.5 flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <ProbabilityPulse
+              matchResult={fixture.matchResult}
+              participant1={fixture.participant1}
+              participant2={fixture.participant2}
+              compact
+            />
+          </div>
+          {favorite !== null ? (
+            <span className="tabular flex-none font-mono text-xs text-ink-muted">
+              {favorite.name}{' '}
+              <span className="font-semibold text-accent-deep">{favorite.pct}%</span>
+            </span>
           ) : null}
         </div>
-        {fixture.phase === 'live' && fixture.matchResult !== null ? (
-          <ProbabilityPulse
-            matchResult={fixture.matchResult}
-            participant1={fixture.participant1}
-            participant2={fixture.participant2}
-            compact
-          />
-        ) : null}
-      </Surface>
+      ) : null}
     </Link>
+  );
+}
+
+export function UpcomingFixtureRow({ fixture }: { fixture: FixtureSummary }) {
+  return (
+    <div className="flex items-center justify-between gap-3.5 px-4 py-3.5 sm:px-4.5">
+      <div className="min-w-0">
+        <Eyebrow size="sm">{fixture.competition}</Eyebrow>
+        <p className="mt-1.5 truncate text-base font-medium tracking-[-0.01em]">
+          {fixture.participant1} vs {fixture.participant2}
+        </p>
+      </div>
+      <span className="tabular flex-none font-mono text-[13px] text-ink-muted">
+        {fixture.startTimeMs > 0 ? formatKickoff(fixture.startTimeMs) : 'scheduled'}
+      </span>
+    </div>
   );
 }

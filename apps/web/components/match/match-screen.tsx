@@ -1,0 +1,504 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import type {
+  CallCategory,
+  CallOption,
+  GuestSession,
+  PickRecord,
+  SettlementNotice,
+} from '@calledit/contracts';
+import { useTickingClock, useWorkerStream } from '../../lib/use-live-match';
+import { ensureGuestSession, clearStoredSession, readStoredSession } from '../../lib/player';
+import { lockPick, LOCK_FAILURE_COPY } from '../../lib/game-api';
+import { lockReplayPick, setReplaySpeed, REPLAY_FAILURE_COPY } from '../../lib/replay-api';
+import { Skeleton } from '../ui/skeleton';
+import { EmptyState } from '../ui/empty-state';
+import { Eyebrow } from '../ui/eyebrow';
+import { Card, Tray } from '../ui/surface';
+import { buttonClassName } from '../ui/button-styles';
+import { ScoreCard } from './score-card';
+import { CallCard } from './call-card';
+import { LatencyHud } from './latency-hud';
+import { EventFeed } from './event-feed';
+import { BookieCard } from './bookie-card';
+import { MatchBoard } from './match-board';
+import { ReplayRibbon } from './replay-ribbon';
+import { SettlementLayer } from './settlement-layer';
+import { formatClockMinutes, formatPoints } from '../../lib/format';
+
+// Punch + ring flash length on a fresh lock (sheet motion tokens).
+const JUST_LOCKED_MS = 500;
+
+export type MatchScreenMode =
+  | { kind: 'live'; fixtureId: number }
+  | { kind: 'replay'; sessionId: string; fixtureId: number; initialSpeed: number };
+
+interface LockedEntry {
+  pick: PickRecord;
+  bookieProbability: number | null;
+}
+
+function BackButton() {
+  return (
+    <Link
+      href="/"
+      aria-label="Back to the lobby"
+      className="inline-flex size-11 items-center justify-center border border-hairline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97]"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <path
+          d="M10 3L5 8l5 5"
+          stroke="var(--ink)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </Link>
+  );
+}
+
+function ReconnectingBanner() {
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-2.5 rounded-chip bg-ink px-3.5 py-2.5 text-white"
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        fill="none"
+        aria-hidden
+        className="animate-[spin-once_900ms_linear_infinite]"
+      >
+        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeOpacity="0.25" strokeWidth="1.6" />
+        <path
+          d="M7 1.5A5.5 5.5 0 0 1 12.5 7"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="text-[13px]">Reconnecting to the live feed</span>
+    </div>
+  );
+}
+
+function LoadingLayout() {
+  return (
+    <div aria-busy className="flex flex-col gap-3.5">
+      <div className="flex items-center justify-between gap-3 py-3">
+        <Skeleton className="size-11" />
+        <Skeleton className="h-2.5 w-36" />
+        <Skeleton className="h-6 w-16" />
+      </div>
+      <Tray className="p-2">
+        <Card className="p-5">
+          <div className="flex items-center justify-center gap-3.5">
+            <Skeleton className="h-4.5 w-22" />
+            <Skeleton className="h-6.5 w-14" />
+            <Skeleton className="h-4.5 w-22" />
+          </div>
+          <div className="mt-2.5 flex justify-center">
+            <Skeleton className="h-3 w-24" />
+          </div>
+          <div className="rule-dashed mb-3 mt-4" />
+          <Skeleton className="h-2 w-full rounded-[6px]" />
+          <div className="mt-2.5 flex justify-center">
+            <Skeleton className="h-2.5 w-50" />
+          </div>
+        </Card>
+      </Tray>
+      <Tray className="p-2">
+        <div className="mx-2.5 mb-2 mt-1">
+          <Skeleton tone="deep" className="h-2 w-19" />
+        </div>
+        <Card>
+          {[0, 1, 2].map((row) => (
+            <div key={row} className={`flex justify-between gap-4 p-4 ${row === 0 ? '' : 'rule-dashed'}`}>
+              <div className="flex flex-1 flex-col gap-2">
+                <Skeleton className="h-2 w-13" />
+                <Skeleton className="h-3.5 w-45" />
+                <Skeleton className="h-2.5 w-27" />
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <Skeleton className="h-4.5 w-12" />
+                <Skeleton className="h-9.5 w-21 rounded-none" />
+              </div>
+            </div>
+          ))}
+        </Card>
+      </Tray>
+    </div>
+  );
+}
+
+export function MatchScreen({
+  mode,
+  participant1,
+  participant2,
+  competition,
+  startTimeMs,
+}: {
+  mode: MatchScreenMode;
+  participant1: string;
+  participant2: string;
+  competition: string;
+  startTimeMs: number;
+}) {
+  const channelPath =
+    mode.kind === 'live' ? `/live/${mode.fixtureId}` : `/replay/sessions/${mode.sessionId}/live`;
+  const { payload, connection, settlements } = useWorkerStream(channelPath);
+  const displayClockSeconds = useTickingClock(payload);
+
+  const [session, setSession] = useState<GuestSession | null>(null);
+  // Keyed by category, not option id: window options regenerate ids as the
+  // clock advances, while the game allows one live call per category
+  // (sourceRef: apps/worker/src/game.ts duplicate_category).
+  const [lockedByCategory, setLockedByCategory] = useState<Map<CallCategory, LockedEntry>>(
+    new Map(),
+  );
+  const [lockingCategory, setLockingCategory] = useState<CallCategory | null>(null);
+  const [lockErrors, setLockErrors] = useState<Map<CallCategory, string>>(new Map());
+  const [justLockedCategory, setJustLockedCategory] = useState<CallCategory | null>(null);
+  const [speed, setSpeed] = useState(mode.kind === 'replay' ? mode.initialSpeed : 1);
+  const [replayNotice, setReplayNotice] = useState<string | null>(null);
+
+  // The stored identity marks "you" on the board without forcing a lock.
+  useEffect(() => {
+    setSession(readStoredSession());
+  }, []);
+
+  useEffect(() => {
+    if (justLockedCategory === null) {
+      return;
+    }
+    const timer = setTimeout(() => setJustLockedCategory(null), JUST_LOCKED_MS);
+    return () => clearTimeout(timer);
+  }, [justLockedCategory]);
+
+  const failLock = (category: CallCategory, message: string): void => {
+    setLockErrors((previous) => new Map(previous).set(category, message));
+    setLockingCategory(null);
+  };
+
+  const recordLock = (category: CallCategory, entry: LockedEntry): void => {
+    setLockedByCategory((previous) => new Map(previous).set(category, entry));
+    setLockingCategory(null);
+    setJustLockedCategory(category);
+  };
+
+  const handleLock = async (option: CallOption): Promise<void> => {
+    setLockingCategory(option.category);
+    setLockErrors((previous) => {
+      const next = new Map(previous);
+      next.delete(option.category);
+      return next;
+    });
+
+    if (mode.kind === 'replay') {
+      const locked = await lockReplayPick(mode.sessionId, option.id);
+      if (!locked.ok) {
+        failLock(option.category, REPLAY_FAILURE_COPY[locked.reason]);
+        return;
+      }
+      recordLock(option.category, {
+        pick: locked.result.pick,
+        bookieProbability: locked.result.bookiePick?.probabilityFraction ?? null,
+      });
+      return;
+    }
+
+    const ensured = await ensureGuestSession();
+    if (!ensured.ok) {
+      failLock(option.category, LOCK_FAILURE_COPY[ensured.reason]);
+      return;
+    }
+    setSession(ensured.session);
+
+    let outcome = await lockPick(ensured.session, mode.fixtureId, option.id);
+    if (!outcome.ok && outcome.reason === 'auth_failed') {
+      // Stored identity no longer valid (wiped server data): start fresh once.
+      clearStoredSession();
+      const fresh = await ensureGuestSession();
+      if (fresh.ok) {
+        setSession(fresh.session);
+        outcome = await lockPick(fresh.session, mode.fixtureId, option.id);
+      }
+    }
+    if (!outcome.ok) {
+      failLock(option.category, LOCK_FAILURE_COPY[outcome.reason]);
+      return;
+    }
+    recordLock(option.category, {
+      pick: outcome.result.pick,
+      bookieProbability: outcome.result.bookiePick?.probabilityFraction ?? null,
+    });
+  };
+
+  const handleSpeed = async (nextSpeed: number): Promise<void> => {
+    if (mode.kind !== 'replay' || nextSpeed === speed) {
+      return;
+    }
+    const previousSpeed = speed;
+    setSpeed(nextSpeed);
+    setReplayNotice(null);
+    const updated = await setReplaySpeed(mode.sessionId, nextSpeed);
+    if (!updated.ok) {
+      setSpeed(previousSpeed);
+      setReplayNotice(REPLAY_FAILURE_COPY[updated.reason]);
+    }
+  };
+
+  if (payload === null && connection !== 'lost') {
+    return <LoadingLayout />;
+  }
+  if (payload === null) {
+    return (
+      <div className="mt-6">
+        <Tray className="p-2">
+          <EmptyState
+            motif="error"
+            title="The feed dropped"
+            action={
+              <Link href="/" className={buttonClassName('primary')}>
+                Back to the lobby
+              </Link>
+            }
+          />
+        </Tray>
+      </div>
+    );
+  }
+
+  // Mine = my locked picks (live) or every human pick (replay is private).
+  const isMine = (notice: SettlementNotice): boolean =>
+    mode.kind === 'replay'
+      ? !notice.pick.isBookie
+      : [...lockedByCategory.values()].some((entry) => entry.pick.id === notice.pick.id);
+  const mySettlements = settlements.filter(isMine);
+  const settledPickIds = new Set(mySettlements.map((notice) => notice.pick.id));
+  const pendingMine = [...lockedByCategory.values()].filter(
+    (entry) => !settledPickIds.has(entry.pick.id),
+  );
+  // A category frees up again once its pick settles.
+  const pendingLockFor = (category: CallCategory): LockedEntry | undefined => {
+    const entry = lockedByCategory.get(category);
+    return entry !== undefined && !settledPickIds.has(entry.pick.id) ? entry : undefined;
+  };
+  const sessionPoints = mySettlements.reduce((sum, notice) => sum + notice.pointsAwarded, 0);
+  const lastBookieProbability =
+    [...lockedByCategory.values()].map((entry) => entry.bookieProbability).at(-1) ?? null;
+  const fixtureLine = `${participant1} vs ${participant2} (${competition})`;
+
+  const callsSection =
+    payload.phase === 'pre' ? (
+      <Tray className="p-2">
+        <div className="mx-2.5 mb-2 mt-1.5 flex">
+          <Eyebrow>Open calls</Eyebrow>
+        </div>
+        <EmptyState
+          motif="flag"
+          title="Calls open at kickoff"
+          action={
+            <Link href="/" className={buttonClassName('ghost')}>
+              See other live matches
+            </Link>
+          }
+        />
+      </Tray>
+    ) : payload.phase === 'finished' ? (
+      mySettlements.length > 0 ? (
+        <Tray className="p-2">
+          <div className="mx-2.5 mb-2 mt-1.5 flex">
+            <Eyebrow>Your settled calls</Eyebrow>
+          </div>
+          <Card className="p-4 sm:px-4.5">
+            {mySettlements.map((notice, index) => (
+              <div key={notice.pick.id}>
+                {index === 0 ? null : <div className="rule-dashed my-3" />}
+                <div className="flex items-baseline justify-between gap-3">
+                  {mode.kind === 'live' ? (
+                    <Link
+                      href={`/r/${notice.pick.id}`}
+                      className="truncate text-sm font-medium underline decoration-hairline underline-offset-2"
+                    >
+                      {notice.pick.claim}
+                    </Link>
+                  ) : (
+                    <span className="truncate text-sm font-medium">{notice.pick.claim}</span>
+                  )}
+                  <span className="flex flex-none items-baseline gap-2">
+                    <span
+                      className={`font-mono text-xs font-semibold ${
+                        notice.outcome === 'hit' ? 'text-accent-deep' : 'text-miss'
+                      }`}
+                    >
+                      {notice.outcome}
+                    </span>
+                    <span
+                      className={`tabular font-mono text-sm font-semibold ${
+                        notice.outcome === 'hit' ? '' : 'text-ink-muted'
+                      }`}
+                    >
+                      {notice.outcome === 'hit' ? `+${formatPoints(notice.pointsAwarded)}` : '0'}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            ))}
+            <div className="rule-dashed my-3" />
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[13px] text-ink-muted">Points this match</span>
+              <span className="tabular font-mono text-base font-semibold">
+                {formatPoints(sessionPoints)}
+              </span>
+            </div>
+          </Card>
+        </Tray>
+      ) : (
+        <Tray className="p-2">
+          <div className="mx-2.5 mb-2 mt-1.5 flex">
+            <Eyebrow>Open calls</Eyebrow>
+          </div>
+          <EmptyState
+            motif="ball"
+            title="Full time. This match has settled."
+            action={
+              <Link href="/" className={buttonClassName('ghost')}>
+                See other matches
+              </Link>
+            }
+          />
+        </Tray>
+      )
+    ) : (
+      <Tray className="p-2">
+        <div className="mx-2.5 mb-2 mt-1.5 flex">
+          <Eyebrow>Open calls</Eyebrow>
+        </div>
+        {payload.catalog.length === 0 ? (
+          <EmptyState motif="flag" title="Calls regenerate while the clock runs" />
+        ) : (
+          <Card className="overflow-hidden">
+            {payload.catalog.map((option, index) => {
+              const pendingLock = pendingLockFor(option.category);
+              return (
+                <div key={option.category} className={index === 0 ? '' : 'rule-dashed'}>
+                  <CallCard
+                    option={option}
+                    clockSeconds={displayClockSeconds}
+                    locked={
+                      pendingLock !== undefined
+                        ? { lockClockSeconds: pendingLock.pick.lockClockSeconds }
+                        : undefined
+                    }
+                    isLocking={lockingCategory === option.category}
+                    lockError={lockErrors.get(option.category)}
+                    justLocked={justLockedCategory === option.category}
+                    enterDelayMs={index * 40}
+                    onLock={(picked) => {
+                      void handleLock(picked);
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </Card>
+        )}
+      </Tray>
+    );
+
+  return (
+    <div>
+      {mode.kind === 'replay' ? (
+        <>
+          <ReplayRibbon speed={speed} sessionPoints={sessionPoints} onSpeed={(next) => void handleSpeed(next)} />
+          {replayNotice !== null ? (
+            <p role="alert" className="mt-2 text-xs text-miss">
+              {replayNotice}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3 pb-3.5 pt-3">
+        <BackButton />
+        <Eyebrow className="text-center">{competition}</Eyebrow>
+        <LatencyHud latency={payload.latency} connectionLost={connection === 'lost'} />
+      </div>
+
+      {connection === 'lost' ? (
+        <div className="mb-3.5">
+          <ReconnectingBanner />
+        </div>
+      ) : null}
+
+      <ScoreCard
+        payload={payload}
+        participant1={participant1}
+        participant2={participant2}
+        startTimeMs={startTimeMs}
+        displayClockSeconds={displayClockSeconds}
+      />
+
+      <div className="mt-5 flex flex-wrap items-start gap-5">
+        <div className="flex min-w-0 flex-[2_1_560px] flex-col gap-5">
+          {callsSection}
+
+          {payload.phase === 'live' && pendingMine.length > 0 ? (
+            <section aria-label="Your open calls">
+              <Eyebrow>Your open calls</Eyebrow>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {pendingMine.map((entry) => (
+                  <span
+                    key={entry.pick.id}
+                    className="inline-flex items-center gap-2 rounded-chip border border-hairline bg-card px-2.5 py-2 text-[13px] text-ink [animation:chip-in_var(--duration-standard)_var(--ease-enter)_both]"
+                  >
+                    {entry.pick.claim}
+                    <span className="tabular font-mono text-xs text-ink-muted">
+                      {formatClockMinutes(entry.pick.lockClockSeconds)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
+          <BookieCard lastMirroredProbability={lastBookieProbability} />
+
+          {mode.kind === 'live' ? (
+            <MatchBoard
+              fixtureId={mode.fixtureId}
+              youPlayerId={session?.playerId ?? null}
+              settlementCount={settlements.length}
+            />
+          ) : null}
+
+          <section aria-label="Event feed">
+            <Eyebrow>Event feed</Eyebrow>
+            <div className="mt-2.5">
+              <EventFeed
+                events={payload.recentEvents}
+                participant1={participant1}
+                participant2={participant2}
+              />
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <SettlementLayer
+        settlements={mySettlements}
+        fixtureLine={fixtureLine}
+        playerHandle={mode.kind === 'live' ? (session?.handle ?? null) : null}
+        isReplay={mode.kind === 'replay'}
+      />
+    </div>
+  );
+}

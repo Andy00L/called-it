@@ -16,24 +16,26 @@ export interface LiveMatchStream {
 }
 
 /**
- * Subscribe to the worker's per-fixture SSE channel. useEffect is justified
- * here: EventSource is a browser-owned external system needing explicit
- * lifecycle cleanup; EventSource reconnects on its own after errors.
+ * Subscribe to one of the worker's SSE channels (live fixture `/live/:id`
+ * or replay session `/replay/sessions/:id/live`; both serve the same
+ * state/settlement frames). useEffect is justified here: EventSource is a
+ * browser-owned external system needing explicit lifecycle cleanup; it
+ * reconnects on its own after errors.
  */
-export function useLiveMatch(fixtureId: number): LiveMatchStream {
+export function useWorkerStream(channelPath: string): LiveMatchStream {
   const [payload, setPayload] = useState<LivePayload | null>(null);
   const [connection, setConnection] = useState<LiveConnection>('connecting');
   const [settlements, setSettlements] = useState<SettlementNotice[]>([]);
 
   useEffect(() => {
-    const source = new EventSource(`${workerUrl()}/live/${fixtureId}`);
+    const source = new EventSource(`${workerUrl()}${channelPath}`);
 
     const handleState = (event: MessageEvent<string>): void => {
       try {
         setPayload(JSON.parse(event.data) as LivePayload);
         setConnection('open');
       } catch {
-        console.error('[useLiveMatch] unparseable state frame, skipping');
+        console.error('[useWorkerStream] unparseable state frame, skipping');
       }
     };
     const handleSettlement = (event: MessageEvent<string>): void => {
@@ -41,7 +43,7 @@ export function useLiveMatch(fixtureId: number): LiveMatchStream {
         const notice = JSON.parse(event.data) as SettlementNotice;
         setSettlements((previous) => [...previous, notice].slice(-MAX_SETTLEMENTS_KEPT));
       } catch {
-        console.error('[useLiveMatch] unparseable settlement frame, skipping');
+        console.error('[useWorkerStream] unparseable settlement frame, skipping');
       }
     };
     const handleOpen = (): void => setConnection('open');
@@ -56,7 +58,32 @@ export function useLiveMatch(fixtureId: number): LiveMatchStream {
       source.removeEventListener('settlement', handleSettlement);
       source.close();
     };
-  }, [fixtureId]);
+  }, [channelPath]);
 
   return { payload, connection, settlements };
+}
+
+/**
+ * Derived display clock: ticks locally between state frames while the match
+ * clock runs. useEffect is justified: an interval timer is an external
+ * system with cleanup.
+ */
+export function useTickingClock(payload: LivePayload | null): number {
+  const baseSeconds = payload?.clockSeconds ?? 0;
+  const running = payload?.clockRunning ?? false;
+  const [displaySeconds, setDisplaySeconds] = useState(baseSeconds);
+
+  useEffect(() => {
+    setDisplaySeconds(baseSeconds);
+    if (!running) {
+      return;
+    }
+    const startedAtMs = Date.now();
+    const timer = setInterval(() => {
+      setDisplaySeconds(baseSeconds + Math.floor((Date.now() - startedAtMs) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [baseSeconds, running]);
+
+  return displaySeconds;
 }

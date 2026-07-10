@@ -1,7 +1,6 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchFixtures } from '../../../lib/api';
-import { LiveMatch } from '../../../components/match/live-match';
+import { MatchScreen } from '../../../components/match/match-screen';
 
 export default async function MatchPage({
   params,
@@ -21,19 +20,13 @@ export default async function MatchPage({
     : undefined;
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8 sm:px-6">
-      <nav>
-        <Link
-          href="/"
-          className="text-sm text-ink-muted transition-colors duration-[var(--duration-small)] hover:text-ink"
-        >
-          &larr; All matches
-        </Link>
-      </nav>
-      <LiveMatch
-        fixtureId={fixtureId}
+    <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+      <MatchScreen
+        mode={{ kind: 'live', fixtureId }}
         participant1={fixture?.participant1 ?? 'Home side'}
         participant2={fixture?.participant2 ?? 'Away side'}
+        competition={fixture?.competition ?? 'World Cup'}
+        startTimeMs={fixture?.startTimeMs ?? 0}
       />
     </main>
   );

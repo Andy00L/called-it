@@ -1,17 +1,28 @@
 'use client';
 
 import type { ButtonHTMLAttributes } from 'react';
+import { buttonClassName, type ButtonVariant } from './button-styles';
 
-type ButtonVariant = 'primary' | 'ghost' | 'destructive';
-
-const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary:
-    'bg-accent text-field font-semibold hover:bg-accent-deep active:scale-[0.97] disabled:bg-line disabled:text-ink-faint',
-  ghost:
-    'border border-line text-ink hover:border-ink-muted active:scale-[0.97] disabled:text-ink-faint disabled:border-line',
-  destructive:
-    'border border-miss text-miss hover:bg-miss/10 active:scale-[0.97] disabled:opacity-50',
-};
+function ButtonSpinner() {
+  return (
+    <svg
+      aria-hidden
+      width="13"
+      height="13"
+      viewBox="0 0 14 14"
+      fill="none"
+      className="animate-[spin-once_900ms_linear_infinite]"
+    >
+      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.6" />
+      <path
+        d="M7 1.5A5.5 5.5 0 0 1 12.5 7"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -29,10 +40,11 @@ export function Button({
   return (
     <button
       disabled={disabled === true || isLoading}
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-chip px-4 py-2 text-sm transition-[background-color,border-color,transform] duration-[var(--duration-small)] ease-[var(--ease-standard)] disabled:cursor-not-allowed ${VARIANT_CLASSES[variant]} ${className}`}
+      className={buttonClassName(variant, className)}
       {...rest}
     >
-      {isLoading ? <span aria-hidden className="animate-pulse">•••</span> : children}
+      {isLoading ? <ButtonSpinner /> : null}
+      {children}
     </button>
   );
 }

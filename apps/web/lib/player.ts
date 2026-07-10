@@ -39,6 +39,15 @@ export function clearStoredSession(): void {
   window.localStorage.removeItem(STORAGE_KEY);
 }
 
+/** Persist a server-confirmed rename so reloads keep the new handle. */
+export function updateStoredHandle(handle: string): void {
+  const stored = readStoredSession();
+  if (stored === null) {
+    return;
+  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...stored, handle }));
+}
+
 function generateHandle(): string {
   // Handle constraint: 2 to 24 chars of letters/numbers/space/_ . - (game.ts).
   return `Fan ${Math.floor(1000 + Math.random() * 9000)}`;

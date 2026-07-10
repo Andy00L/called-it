@@ -3,7 +3,27 @@ import { notFound } from 'next/navigation';
 import type { ReceiptPayload } from '@calledit/contracts';
 import { workerUrl } from '../../../lib/api';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { Tray } from '../../../components/ui/surface';
+import { buttonClassName } from '../../../components/ui/button-styles';
 import { ReceiptTicket } from '../../../components/receipt/receipt-ticket';
+import { ReceiptActions } from '../../../components/receipt/receipt-actions';
+
+function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
+  return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;
+}
+
+function WordmarkBar() {
+  return (
+    <div className="flex py-3">
+      <Link
+        href="/"
+        className="inline-flex min-h-11 items-center border border-hairline px-3.5 text-[15px] font-semibold tracking-[-0.03em] text-ink hover:underline"
+      >
+        CALLED IT
+      </Link>
+    </div>
+  );
+}
 
 // Public share page: no identity required, receipts are public by design
 // (db RLS: picks and settlements are world-readable, no secrets on them).
@@ -34,31 +54,42 @@ export default async function ReceiptPage({
     feedDown = true;
   }
 
+  if (feedDown || receipt === null) {
+    return (
+      <main className="mx-auto w-full max-w-[640px] px-5 pb-20 sm:px-7.5">
+        <WordmarkBar />
+        <div className="mt-14">
+          <Tray className="p-2">
+            <EmptyState
+              motif="error"
+              title="The receipt did not load"
+              action={
+                <Link href={`/r/${pickId}`} className={buttonClassName('primary')}>
+                  Retry
+                </Link>
+              }
+            />
+          </Tray>
+        </div>
+      </main>
+    );
+  }
+
+  const explorerUrl =
+    receipt.commitment !== null && receipt.commitment.memoTxSig !== null
+      ? explorerTxUrl(receipt.commitment.memoTxSig, receipt.network)
+      : null;
+
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10 sm:px-6">
-      {feedDown || receipt === null ? (
-        <EmptyState
-          title="Receipt unavailable right now"
-          detail="The game server did not answer. The receipt is durable; try again in a moment."
-        />
-      ) : (
-        <>
-          <ReceiptTicket receipt={receipt} />
-          <div className="flex flex-col items-center gap-2 text-center">
-            <p className="max-w-md text-xs text-ink-faint">
-              This call was hashed and batched into a Merkle root posted on Solana before its
-              event resolved. The leaf, the proof path, and the on-chain memo let anyone verify
-              the call existed, at this exact market price, ahead of time.
-            </p>
-            <Link
-              href="/"
-              className="text-sm text-ink-muted transition-colors duration-[var(--duration-small)] hover:text-ink"
-            >
-              Play the live matches
-            </Link>
-          </div>
-        </>
-      )}
+    <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+      <WordmarkBar />
+      <div className="mx-auto mt-14 flex max-w-[640px] flex-col items-center">
+        <ReceiptTicket receipt={receipt} />
+        <ReceiptActions explorerUrl={explorerUrl} />
+        <p className="mt-4.5 text-center text-xs text-ink-muted">
+          Solana {receipt.network}. The proof recomputes on every load.
+        </p>
+      </div>
     </main>
   );
 }

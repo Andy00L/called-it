@@ -1,43 +1,58 @@
 import type { MatchEvent } from '@calledit/contracts';
-import { formatClockMinutes } from '../../lib/format';
+import { Card } from '../ui/surface';
+import { formatClockMinutes, teamTag } from '../../lib/format';
 
 // Display labels for feed actions (snake_case vocabulary, txline-api-facts).
 const ACTION_LABELS: Record<string, string> = {
-  goal: 'Goal',
-  corner: 'Corner',
-  yellow_card: 'Yellow card',
-  red_card: 'Red card',
+  goal: 'goal',
+  corner: 'corner',
+  yellow_card: 'yellow card',
+  red_card: 'red card',
+  shot: 'shot',
 };
 
-const SHOWN_EVENT_COUNT = 12;
+const SHOWN_EVENT_COUNT = 8;
 
-export function EventFeed({ events }: { events: MatchEvent[] }) {
+export function EventFeed({
+  events,
+  participant1,
+  participant2,
+}: {
+  events: MatchEvent[];
+  participant1: string;
+  participant2: string;
+}) {
   const shown = events.slice(-SHOWN_EVENT_COUNT).reverse();
-  if (shown.length === 0) {
-    return (
-      <p className="text-sm text-ink-muted">
-        No goals, corners, or cards yet. Calls resolve on confirmed events only.
-      </p>
-    );
-  }
   return (
-    <ul className="flex flex-col gap-2" aria-live="polite">
-      {shown.map((event) => (
-        <li
-          key={`${event.ts}:${event.action}:${event.clockSeconds}`}
-          className="flex items-center gap-3 text-sm"
-        >
-          <span className="tabular w-10 shrink-0 font-mono text-ink-muted">
-            {formatClockMinutes(event.clockSeconds)}
-          </span>
-          <span className={event.action === 'goal' ? 'font-semibold text-accent' : ''}>
-            {ACTION_LABELS[event.action] ?? event.action}
-          </span>
-          <span className="text-ink-faint">
-            {event.participant === 1 ? 'home side' : event.participant === 2 ? 'away side' : ''}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <Card className="px-4 py-0.5">
+      {shown.length === 0 ? (
+        <p className="py-3 text-[13px] text-ink-muted">
+          No confirmed events yet. Calls settle on confirmed events only.
+        </p>
+      ) : (
+        <div aria-live="polite">
+          {shown.map((event, index) => (
+            <div
+              key={`${event.ts}:${event.action}:${event.clockSeconds}`}
+              className={`flex items-baseline gap-3 py-[11px] text-[13px] text-ink-muted ${
+                index === 0 ? '' : 'rule-dashed'
+              }`}
+            >
+              <span className="tabular font-mono text-xs">
+                {formatClockMinutes(event.clockSeconds)}
+              </span>
+              <span className="flex-1">{ACTION_LABELS[event.action] ?? event.action}</span>
+              <span className="font-mono text-xs">
+                {event.participant === 1
+                  ? teamTag(participant1)
+                  : event.participant === 2
+                    ? teamTag(participant2)
+                    : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

@@ -231,3 +231,8 @@ export type {
   MatchEvent,
   MatchResultProbabilities,
 };
+
+// Value re-export so clients can show the real streak math without
+// duplicating the formula. The subpath keeps browser bundles off the full
+// engine index (points.ts is dependency-free).
+export { streakMultiplier } from '@calledit/engine/points';

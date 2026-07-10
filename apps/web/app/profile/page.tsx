@@ -2,41 +2,92 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { ProfilePayload } from '@calledit/contracts';
+import type { GuestSession, ProfilePayload } from '@calledit/contracts';
 import { readStoredSession } from '../../lib/player';
 import { getProfile } from '../../lib/game-api';
 import { EmptyState } from '../../components/ui/empty-state';
 import { Skeleton } from '../../components/ui/skeleton';
-import { Surface } from '../../components/ui/surface';
+import { Card, Tray } from '../../components/ui/surface';
 import { Button } from '../../components/ui/button';
-import { formatPoints, formatProbability } from '../../lib/format';
+import { buttonClassName } from '../../components/ui/button-styles';
+import { Eyebrow } from '../../components/ui/eyebrow';
+import { IdentityCard } from '../../components/profile/identity-card';
+import { StatsCards } from '../../components/profile/stats-cards';
+import { BookieDuel } from '../../components/profile/bookie-duel';
+import { CalibrationCard } from '../../components/profile/calibration-card';
 
 type ProfileView =
   | { kind: 'loading' }
   | { kind: 'no_identity' }
   | { kind: 'error' }
-  | { kind: 'ready'; profile: ProfilePayload };
+  | { kind: 'ready'; session: GuestSession; profile: ProfilePayload };
 
-function SectionHeading({ children }: { children: string }) {
-  return <h2 className="text-xs uppercase tracking-[0.08em] text-ink-muted">{children}</h2>;
-}
-
-function StatRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function TopBar() {
   return (
-    <div className="flex items-baseline justify-between gap-3 px-4 py-3">
-      <div className="flex flex-col">
-        <span className="text-sm">{label}</span>
-        {hint !== undefined ? <span className="text-xs text-ink-faint">{hint}</span> : null}
-      </div>
-      <span className="tabular shrink-0 font-mono text-base font-semibold">{value}</span>
+    <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3 pb-3.5 pt-3">
+      <Link
+        href="/"
+        aria-label="Back to the lobby"
+        className="inline-flex size-11 items-center justify-center border border-hairline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97]"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <path
+            d="M10 3L5 8l5 5"
+            stroke="var(--ink)"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </Link>
+      <span className="justify-self-center">
+        <Eyebrow>Your profile</Eyebrow>
+      </span>
+      <span />
     </div>
   );
 }
 
-/** Signed percentage-point display for edge: 0.083 -> "+8.3 pts". */
-function formatEdge(edgeFraction: number): string {
-  const points = edgeFraction * 100;
-  return `${points >= 0 ? '+' : ''}${points.toFixed(1)} pts`;
+function LoadingLayout() {
+  return (
+    <div aria-busy className="flex flex-col gap-3.5">
+      <Tray className="p-2">
+        <Card className="px-5 py-4.5">
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="size-11" />
+          </div>
+          <Skeleton className="mt-3 h-3 w-24" />
+        </Card>
+      </Tray>
+      <Tray className="p-2">
+        <div className="flex gap-2">
+          {[0, 1, 2].map((plate) => (
+            <Card key={plate} className="flex-1 p-3.5">
+              <Skeleton className="h-2 w-16" />
+              <Skeleton className="mt-2.5 h-6 w-13" />
+            </Card>
+          ))}
+        </div>
+      </Tray>
+      <Tray className="p-2">
+        <Card className="px-4.5 py-4">
+          {[0, 1, 2, 3, 4].map((band) => (
+            <div
+              key={band}
+              className={`grid grid-cols-[58px_1fr_60px] items-center gap-3 py-2.5 ${
+                band === 0 ? '' : 'rule-dashed'
+              }`}
+            >
+              <Skeleton className="h-2.5 w-full" />
+              <Skeleton className="h-1.5 w-full rounded-[3px]" />
+              <Skeleton className="h-2.5 w-full" />
+            </div>
+          ))}
+        </Card>
+      </Tray>
+    </div>
+  );
 }
 
 export default function ProfilePage() {
@@ -62,167 +113,100 @@ export default function ProfilePage() {
         setView(fetched.reason === 'unknown_player' ? { kind: 'no_identity' } : { kind: 'error' });
         return;
       }
-      setView({ kind: 'ready', profile: fetched.profile });
+      setView({ kind: 'ready', session, profile: fetched.profile });
     };
     void load();
     return () => abortController.abort();
   }, [reloadCount]);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8 sm:px-6">
-      <nav>
-        <Link
-          href="/"
-          className="text-sm text-ink-muted transition-colors duration-[var(--duration-small)] hover:text-ink"
-        >
-          &larr; All matches
-        </Link>
-      </nav>
+    <main className="mx-auto w-full max-w-[640px] px-5 pb-20 sm:px-7.5">
+      <TopBar />
 
       {view.kind === 'loading' ? (
-        <div className="flex flex-col gap-4" aria-busy>
-          <Skeleton className="h-9 w-48" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </div>
+        <LoadingLayout />
       ) : view.kind === 'no_identity' ? (
-        <EmptyState
-          title="No profile yet"
-          detail="Lock your first call during a live match and your skill profile starts building here."
-        />
+        <Tray className="p-2">
+          <EmptyState
+            motif="flag"
+            title="Lock your first call during a live match"
+            action={
+              <Link href="/" className={buttonClassName('primary')}>
+                See live matches
+              </Link>
+            }
+          />
+        </Tray>
       ) : view.kind === 'error' ? (
-        <EmptyState
-          title="Could not load your profile"
-          detail="The game server did not answer. Retry in a moment."
-          action={
-            <Button variant="ghost" onClick={() => setReloadCount((count) => count + 1)}>
-              Retry
-            </Button>
-          }
-        />
+        <Tray className="p-2">
+          <EmptyState
+            motif="error"
+            title="Your profile did not load"
+            action={
+              <Button variant="primary" onClick={() => setReloadCount((count) => count + 1)}>
+                Retry
+              </Button>
+            }
+          />
+        </Tray>
       ) : (
-        <ProfileBody profile={view.profile} />
+        <ProfileBody
+          session={view.session}
+          profile={view.profile}
+          onRenamed={(handle) => {
+            setView({
+              kind: 'ready',
+              session: { ...view.session, handle },
+              profile: { ...view.profile, handle },
+            });
+          }}
+        />
       )}
     </main>
   );
 }
 
-function ProfileBody({ profile }: { profile: ProfilePayload }) {
-  const margin = profile.bookie.marginPoints;
-  const filledBuckets = profile.calibration.filter((bucket) => bucket.pickCount > 0);
-
+function ProfileBody({
+  session,
+  profile,
+  onRenamed,
+}: {
+  session: GuestSession;
+  profile: ProfilePayload;
+  onRenamed: (handle: string) => void;
+}) {
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="font-mono text-2xl font-semibold tracking-tight">{profile.handle}</h1>
-        <p className="tabular font-mono text-4xl font-semibold">
-          {formatPoints(profile.totalPoints)}
-          <span className="ml-2 text-base font-normal text-ink-muted">pts</span>
-        </p>
-        <p className="text-sm text-ink-muted">
-          streak {profile.currentStreak} (best {profile.bestStreak}) over{' '}
-          {profile.settledPickCount} settled calls
-        </p>
-      </header>
+    <div className="flex flex-col gap-5">
+      <IdentityCard
+        session={session}
+        handle={profile.handle}
+        settledPickCount={profile.settledPickCount}
+        onRenamed={onRenamed}
+      />
 
-      <section className="flex flex-col gap-3">
-        <SectionHeading>You vs The Bookie</SectionHeading>
-        <Surface className="flex flex-col divide-y divide-line">
-          <StatRow
-            label="Your points"
-            value={formatPoints(profile.bookie.playerPoints)}
-            hint="on settled calls, streaks included"
-          />
-          <StatRow
-            label="The Bookie's points"
-            value={formatPoints(profile.bookie.bookiePoints)}
-            hint="the market favorite of your every call, played flat"
-          />
-          <div className="flex items-baseline justify-between gap-3 px-4 py-3">
-            <span className="text-sm font-semibold">Margin</span>
-            <span
-              className={`tabular shrink-0 font-mono text-xl font-semibold ${margin >= 0 ? 'text-accent' : 'text-miss'}`}
-            >
-              {margin >= 0 ? '+' : ''}
-              {formatPoints(margin)}
-            </span>
-          </div>
-        </Surface>
-        <p className="text-xs text-ink-faint">
-          Positive margin means you beat the market itself, not just other players.
-        </p>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <SectionHeading>Skill vs the market</SectionHeading>
-        <Surface className="flex flex-col divide-y divide-line">
-          <StatRow
-            label="Edge vs market"
-            value={profile.edgeVsMarket === null ? 'no data' : formatEdge(profile.edgeVsMarket)}
-            hint="your hit rate minus what the market predicted for your picks"
-          />
-          <StatRow
-            label="Market surprise (Brier)"
-            value={
-              profile.marketBrierScore === null ? 'no data' : profile.marketBrierScore.toFixed(3)
+      {profile.settledPickCount === 0 ? (
+        <Tray className="p-2">
+          <EmptyState
+            motif="flag"
+            title="Lock your first call during a live match"
+            action={
+              <Link href="/" className={buttonClassName('primary')}>
+                See live matches
+              </Link>
             }
-            hint="higher means you hunt calls the market prices poorly"
           />
-        </Surface>
-      </section>
-
-      {filledBuckets.length > 0 ? (
-        <section className="flex flex-col gap-3">
-          <SectionHeading>Calibration</SectionHeading>
-          <Surface className="overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-[0.08em] text-ink-muted">
-                  <th scope="col" className="px-4 py-3 font-medium">Market band</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Calls</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Market said</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">You hit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filledBuckets.map((bucket) => {
-                  const beatMarket =
-                    bucket.hitRateFraction !== null &&
-                    bucket.averageProbabilityFraction !== null &&
-                    bucket.hitRateFraction > bucket.averageProbabilityFraction;
-                  return (
-                    <tr
-                      key={bucket.lowerBoundFraction}
-                      className="border-b border-line last:border-b-0"
-                    >
-                      <td className="tabular px-4 py-3 font-mono text-ink-muted">
-                        {Math.round(bucket.lowerBoundFraction * 100)}-
-                        {Math.round(bucket.upperBoundFraction * 100)}%
-                      </td>
-                      <td className="tabular px-4 py-3 text-right font-mono">{bucket.pickCount}</td>
-                      <td className="tabular px-4 py-3 text-right font-mono text-ink-muted">
-                        {bucket.averageProbabilityFraction === null
-                          ? ''
-                          : formatProbability(bucket.averageProbabilityFraction)}
-                      </td>
-                      <td
-                        className={`tabular px-4 py-3 text-right font-mono ${beatMarket ? 'font-semibold text-accent' : ''}`}
-                      >
-                        {bucket.hitRateFraction === null
-                          ? ''
-                          : formatProbability(bucket.hitRateFraction)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Surface>
-          <p className="text-xs text-ink-faint">
-            Hitting above what the market said, in any band, is edge the market missed.
-          </p>
-        </section>
-      ) : null}
+        </Tray>
+      ) : (
+        <>
+          <StatsCards
+            totalPoints={profile.totalPoints}
+            currentStreak={profile.currentStreak}
+            bestStreak={profile.bestStreak}
+          />
+          <BookieDuel bookie={profile.bookie} />
+          <CalibrationCard profile={profile} />
+        </>
+      )}
     </div>
   );
 }

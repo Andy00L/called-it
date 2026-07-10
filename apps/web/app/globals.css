@@ -1,81 +1,95 @@
 @import 'tailwindcss';
 
 /*
- * Token sheet: docs/UI_DESIGN_SYSTEM.md ("Stade de nuit + Receipt").
+ * Token sheet: docs/UI_DESIGN_SYSTEM.md ("Matchday programme", light only).
  * Every value here traces to that sheet; components never use literals.
  */
 :root {
-  --field: #0a0f0b;
-  --surface: #111813;
-  --line: #1e2a21;
-  --ink: #f2f7f3;
-  --ink-muted: #8fa396;
-  --ink-faint: #5c6b60;
-  --accent: #b6ff3b;
-  --accent-deep: #7db428;
-  --streak: #ffc24b;
-  --miss: #ff5d5d;
+  --cream: #faf7ef;
+  --soft: #f0ebdd;
+  --card: #ffffff;
+  --ink: #12170f;
+  --ink-muted: #67705f;
+  --ink-faint: #9aa18f;
+  --accent: #2c8c3c;
+  --accent-deep: #1f6b2c;
+  --accent-soft: #eaf4eb;
+  --streak: #b87514;
+  --streak-soft: rgba(184, 117, 20, 0.12);
+  --streak-line: rgba(184, 117, 20, 0.5);
+  --miss: #d24141;
+  --hairline: rgba(18, 23, 15, 0.1);
+  --accent-line: rgba(44, 140, 60, 0.4);
+  --pulse-mid: #ded8c6;
+  --pulse-low: #b9b29e;
+  --skeleton-deep: #e4decd;
+  --band-track: rgba(18, 23, 15, 0.06);
+  --ink-ring: #3a4136;
   --paper: #f6f3ea;
   --paper-ink: #151515;
+  --paper-rule: rgba(21, 21, 21, 0.3);
 
-  /* stadium glow: the field is never flat black (sheet, material section) */
-  --field-glow: radial-gradient(
-    120% 60% at 50% 0%,
-    rgba(182, 255, 59, 0.05) 0%,
-    rgba(182, 255, 59, 0.015) 38%,
-    rgba(0, 0, 0, 0) 70%
-  );
-
-  /* motion tokens (sheet): durations ms, easing family */
+  /* motion tokens (sheet): durations ms, easing family, stagger 40ms */
   --duration-micro: 70ms;
   --duration-small: 150ms;
-  --duration-standard: 220ms;
-  --duration-hero: 320ms;
-  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --duration-standard: 250ms;
+  --duration-hero: 400ms;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-standard: cubic-bezier(0.44, 0, 0.56, 1);
 
-  /* elevated card material (sheet, dark logic: edges carry elevation) */
-  --card-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.4),
-    0 12px 32px rgba(0, 0, 0, 0.5);
+  /* depth (sheet): flat in-flow; only floating objects cast shadows */
+  --tray-inset: inset 0 0 6px 0 rgba(18, 23, 15, 0.16);
+  --shadow-float:
+    0 2px 3px rgba(18, 23, 15, 0.05), 0 14px 20px rgba(18, 23, 15, 0.06);
+  --shadow-receipt:
+    0 10px 24px rgba(18, 23, 15, 0.14), 0 2px 3px rgba(18, 23, 15, 0.05);
+  --shadow-btn-primary:
+    0 0 0 1px var(--accent-deep), inset 0 1.4px 1px rgba(255, 255, 255, 0.15),
+    0 1.4px 4px rgba(18, 23, 15, 0.3);
+  --shadow-btn-secondary:
+    inset 0 1.4px 1px rgba(255, 255, 255, 0.08), 0 0 0 1.4px var(--ink-ring);
 }
 
 @theme inline {
-  --color-field: var(--field);
-  --color-surface: var(--surface);
-  --color-line: var(--line);
+  --color-cream: var(--cream);
+  --color-soft: var(--soft);
+  --color-card: var(--card);
   --color-ink: var(--ink);
   --color-ink-muted: var(--ink-muted);
   --color-ink-faint: var(--ink-faint);
   --color-accent: var(--accent);
   --color-accent-deep: var(--accent-deep);
+  --color-accent-soft: var(--accent-soft);
   --color-streak: var(--streak);
   --color-miss: var(--miss);
+  --color-hairline: var(--hairline);
+  --color-accent-line: var(--accent-line);
+  --color-pulse-mid: var(--pulse-mid);
+  --color-pulse-low: var(--pulse-low);
+  --color-skeleton-deep: var(--skeleton-deep);
   --color-paper: var(--paper);
   --color-paper-ink: var(--paper-ink);
 
   --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-numeric), ui-monospace, monospace;
 
-  --radius-chip: 10px;
-  --radius-card: 14px;
-  --radius-sheet: 18px;
+  /* radii scale (sheet): 0 CTAs / 4 chips / 8 cards / 16 trays */
+  --radius-chip: 4px;
+  --radius-card: 8px;
+  --radius-tray: 16px;
 }
 
 body {
-  background-color: var(--field);
-  background-image: var(--field-glow);
-  background-repeat: no-repeat;
+  background-color: var(--cream);
   color: var(--ink);
   font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* one focus treatment, everywhere (sheet, primitives section) */
+/* one focus treatment, everywhere (sheet, a11y floor) */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
 /* every number is machine-precise (sheet, type section) */
@@ -83,21 +97,175 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The one material: soft inset tray holding flat white cards (sheet). */
+.tray {
+  background: var(--soft);
+  border-radius: 16px;
+  box-shadow: var(--tray-inset);
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+/* Internal separators are 1px dashed hairlines (ticket-rule motif, sheet). */
+.rule-dashed {
+  border-top: 1px dashed var(--hairline);
+}
+
 /*
  * Receipt perforation (signature element 2, sheet): punched semicircles
- * showing the dark field through the paper edge, like a thermal ticket.
+ * showing the cream page through the paper edge, like a thermal ticket.
  */
 .receipt-perforation-top {
   height: 10px;
-  background-color: var(--paper);
-  background-image: radial-gradient(circle at 10px 0, var(--field) 4px, transparent 4.5px);
+  background-image: radial-gradient(
+    circle at 10px 10px,
+    rgba(0, 0, 0, 0) 4px,
+    var(--paper) 4.5px
+  );
   background-size: 20px 10px;
 }
 .receipt-perforation-bottom {
   height: 10px;
-  background-color: var(--paper);
-  background-image: radial-gradient(circle at 10px 10px, var(--field) 4px, transparent 4.5px);
+  background-image: radial-gradient(
+    circle at 10px 0,
+    rgba(0, 0, 0, 0) 4px,
+    var(--paper) 4.5px
+  );
   background-size: 20px 10px;
+}
+
+/* Motion vocabulary of the accepted exports; durations/curves are tokens. */
+@keyframes deck-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes punch-card {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.98);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes ring-flash {
+  0% {
+    box-shadow: 0 0 0 2px rgba(44, 140, 60, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 0 2px rgba(44, 140, 60, 0);
+  }
+}
+/* The ONE overshoot of the product: the receipt print-in (sheet, motion). */
+@keyframes receipt-in {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  72% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes bar-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes you-flash {
+  0% {
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes edit-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes spin-once {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

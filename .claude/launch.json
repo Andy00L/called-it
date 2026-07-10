@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": [
+        "-e",
+        "bash",
+        "-lc",
+        "cd /home/drew/txline-consumer && pnpm --filter @calledit/web dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

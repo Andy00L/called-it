@@ -1,22 +1,26 @@
 import type { ReactNode } from 'react';
 
 /**
- * The one card material of the product (sheet: "Material and depth").
- * Elevation carried by edges + layered shadow; never nested on itself.
+ * The one material of the product (sheet, "Material and depth"): a soft
+ * inset tray holding flat white cards. Trays never nest; cards inside a
+ * tray cast no shadow.
  */
-export function Surface({
+export function Tray({
   children,
   className = '',
 }: {
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <div
-      className={`rounded-card border border-line bg-surface ${className}`}
-      style={{ boxShadow: 'var(--card-shadow)' }}
-    >
-      {children}
-    </div>
-  );
+  return <div className={`tray ${className}`}>{children}</div>;
+}
+
+export function Card({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={`card ${className}`}>{children}</div>;
 }

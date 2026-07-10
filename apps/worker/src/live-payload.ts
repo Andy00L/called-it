@@ -1,4 +1,4 @@
-import { generateCalls, pickBookieDeck, readStat } from '@calledit/engine';
+import { buildMomentum, generateCalls, pickBookieDeck, readStat } from '@calledit/engine';
 import type { LivePayload } from '@calledit/contracts';
 import { snapshotLatency, type LatencyTracker } from './latency.js';
 import { isInRunning, type MatchState } from './state.js';
@@ -23,6 +23,17 @@ export function buildLivePayloadForState(
     matchResult: state.matchResult,
     inRunning: isInRunning(state),
   });
+  // Possession and pre-event signals only read while the match is live; a
+  // finished or pre-match pitch rests on the market tilt (calm), and the last
+  // event still shows so a final goal keeps its marker.
+  const isLive = state.phase === 'live';
+  const momentum = buildMomentum({
+    possessingTeam: isLive ? state.possessingTeam : null,
+    dangerLevel: isLive ? state.dangerLevel : null,
+    matchResult: state.matchResult,
+    pendingSignal: isLive ? state.pendingSignal : null,
+    lastEvent: state.lastEvent,
+  });
   return {
     fixtureId: state.fixtureId,
     phase: state.phase,
@@ -36,6 +47,7 @@ export function buildLivePayloadForState(
     recentEvents: state.events.slice(-LIVE_PAYLOAD_EVENT_LIMIT),
     catalog,
     bookieDeck: pickBookieDeck(catalog),
+    momentum,
     latency: { scores: snapshotLatency(scoresLatency), odds: snapshotLatency(oddsLatency) },
     updatedAtMs: state.updatedAtMs,
   };

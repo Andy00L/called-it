@@ -30,6 +30,7 @@ export function CallCard({
   lockError,
   justLocked,
   enterDelayMs,
+  sponsor,
   onLock,
 }: {
   option: CallOption;
@@ -40,6 +41,8 @@ export function CallCard({
   /** True right after a successful lock: plays the punch + ring flash. */
   justLocked: boolean;
   enterDelayMs: number;
+  /** Sample brand for the sponsored-call ad unit; undefined on unsponsored calls. */
+  sponsor: string | undefined;
   onLock: (option: CallOption) => void;
 }) {
   const windowEnd = windowEndClockSeconds(option);
@@ -61,6 +64,12 @@ export function CallCard({
         }`}
       >
         <div className="min-w-0">
+          {sponsor !== undefined ? (
+            <span className="mb-2 inline-flex items-center gap-1.5 rounded-chip border border-hairline px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-muted">
+              <span aria-hidden className="size-1 rounded-full bg-accent" />
+              Presented by {sponsor}
+            </span>
+          ) : null}
           <Eyebrow size="sm" tone={isClosing ? 'faint' : 'default'}>
             {option.category}
           </Eyebrow>

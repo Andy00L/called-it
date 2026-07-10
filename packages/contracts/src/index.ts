@@ -4,8 +4,11 @@ import type {
   CallCategory,
   CallOption,
   CallPredicate,
+  DangerLevel,
   MatchEvent,
   MatchResultProbabilities,
+  PitchMomentum,
+  PitchTeam,
 } from '@calledit/engine';
 
 /**
@@ -37,6 +40,8 @@ export interface LivePayload {
   recentEvents: MatchEvent[];
   catalog: CallOption[];
   bookieDeck: CallOption[];
+  /** Pressure-pitch momentum derived from possession/danger/market (no tracking). */
+  momentum: PitchMomentum;
   latency: { scores: LatencySnapshot | null; odds: LatencySnapshot | null };
   updatedAtMs: number;
 }
@@ -131,6 +136,19 @@ export interface ProfilePayload {
   marketBrierScore: number | null;
   calibration: CalibrationBucket[];
   bookie: BookieMargin;
+  /** Linked Solana wallet (base58), or null when the profile is guest-only. */
+  walletPubkey: string | null;
+}
+
+/** POST /players/challenge response: the message a wallet must sign. */
+export interface WalletChallengePayload {
+  nonce: string;
+  message: string;
+}
+
+/** POST /players/wallet-link response. */
+export interface WalletLinkResult {
+  walletPubkey: string;
 }
 
 /** One row of GET /replay/tapes: a finished match available for replay. */
@@ -228,8 +246,11 @@ export type {
   CallCategory,
   CallOption,
   CallPredicate,
+  DangerLevel,
   MatchEvent,
   MatchResultProbabilities,
+  PitchMomentum,
+  PitchTeam,
 };
 
 // Value re-export so clients can show the real streak math without

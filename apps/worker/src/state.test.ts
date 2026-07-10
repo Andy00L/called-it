@@ -33,6 +33,56 @@ const REAL_MATCH_RESULT_ODDS: OddsPayload = {
   Pct: ['55.804', '34.710', '9.524'],
 };
 
+test('possession, danger, pre-signal and last event feed the pressure pitch', () => {
+  const store = createMatchStateStore();
+  const fixtureId = 4242;
+  // Kick off so the phase is live.
+  applyScoresUpdate(
+    store,
+    { FixtureId: fixtureId, Ts: 1, Action: 'kickoff', Clock: { Running: true, Seconds: 60 } },
+    1,
+  );
+  // A high-danger possession record for team 1.
+  applyScoresUpdate(
+    store,
+    {
+      FixtureId: fixtureId,
+      Ts: 2,
+      Participant: 1,
+      PossessionType: 'HighDangerPossession',
+      PossibleEvent: { Corner: true },
+      Clock: { Running: true, Seconds: 70 },
+    },
+    2,
+  );
+  let state = getMatchState(store, fixtureId);
+  assert.ok(state !== undefined);
+  assert.equal(state.possessingTeam, 'p1');
+  assert.equal(state.dangerLevel, 'high_danger');
+  assert.deepEqual(state.pendingSignal, { kind: 'corner', team: 'p1' });
+  assert.equal(state.lastEvent, null);
+
+  // The corner lands: it becomes the last event and clears the shimmer.
+  applyScoresUpdate(
+    store,
+    {
+      FixtureId: fixtureId,
+      Ts: 3,
+      Action: 'corner',
+      Confirmed: true,
+      Participant: 1,
+      Clock: { Running: true, Seconds: 75 },
+    },
+    3,
+  );
+  state = getMatchState(store, fixtureId);
+  assert.ok(state !== undefined);
+  assert.equal(state.pendingSignal, null);
+  assert.equal(state.lastEvent?.kind, 'corner');
+  assert.equal(state.lastEvent?.team, 'p1');
+  assert.equal(state.lastEvent?.id, 1);
+});
+
 test('replaying the real scores capture rebuilds the final match state', () => {
   const store = createMatchStateStore();
   const orderedUpdates = [...capturedUpdates].sort(

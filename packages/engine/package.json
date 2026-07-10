@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test src/points.test.ts src/score.test.ts src/calls.test.ts src/odds.test.ts src/catalog.test.ts src/replay.test.ts src/bookie.test.ts src/calibration.test.ts"
+    "test": "node --import tsx --test src/points.test.ts src/score.test.ts src/calls.test.ts src/odds.test.ts src/catalog.test.ts src/replay.test.ts src/bookie.test.ts src/calibration.test.ts src/momentum.test.ts"
   },
   "dependencies": {
     "@calledit/txline": "workspace:*"

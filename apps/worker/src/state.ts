@@ -1,9 +1,16 @@
 import {
   extractEvent,
   MARKET_MATCH_RESULT,
+  parsePossibleEvent,
+  participantToTeam,
+  possessionTypeToDanger,
   readMatchResult,
+  type DangerLevel,
   type MatchEvent,
   type MatchResultProbabilities,
+  type PitchEventMarker,
+  type PitchPendingSignal,
+  type PitchTeam,
 } from '@calledit/engine';
 import type { OddsPayload, ScoresUpdate, SoccerFixtureScore } from '@calledit/txline';
 import type { MatchPhase } from '@calledit/contracts';
@@ -44,6 +51,17 @@ export interface MatchState {
   matchResult: MatchResultProbabilities | null;
   /** Ts of the odds record behind matchResult, 0 before the first one. */
   matchResultTs: number;
+  // Pressure-pitch inputs (raw facts; geometry is computed in live-payload).
+  /** Team in possession from the latest possession record, null before any. */
+  possessingTeam: PitchTeam | null;
+  /** Danger of the current possession, null before any possession record. */
+  dangerLevel: DangerLevel | null;
+  /** Pre-event signal (PossibleEvent), cleared when the next event lands. */
+  pendingSignal: PitchPendingSignal | null;
+  /** Newest placed goal/corner/card, with a monotonic id so it animates once. */
+  lastEvent: PitchEventMarker | null;
+  /** Monotonic marker id source for lastEvent. */
+  eventMarkerSeq: number;
   lastScoresTs: number;
   lastOddsTs: number;
   updatedAtMs: number;
@@ -73,6 +91,11 @@ function getOrCreateState(store: MatchStateStore, fixtureId: number): MatchState
     events: [],
     matchResult: null,
     matchResultTs: 0,
+    possessingTeam: null,
+    dangerLevel: null,
+    pendingSignal: null,
+    lastEvent: null,
+    eventMarkerSeq: 0,
     lastScoresTs: 0,
     lastOddsTs: 0,
     updatedAtMs: 0,
@@ -119,6 +142,21 @@ export function applyScoresUpdate(
     if (update.StatusId !== undefined) {
       state.statusId = update.StatusId;
     }
+    // Pressure-pitch inputs from the newest record only (older records would
+    // regress the momentum). Possession danger updates the team + level;
+    // Participant on the record is the team the signal is about.
+    const danger = possessionTypeToDanger(update.PossessionType);
+    if (danger !== null) {
+      state.dangerLevel = danger;
+      const possessing = participantToTeam(update.Participant);
+      if (possessing !== null) {
+        state.possessingTeam = possessing;
+      }
+    }
+    const signal = parsePossibleEvent(update.PossibleEvent, update.Participant);
+    if (signal !== null) {
+      state.pendingSignal = signal;
+    }
   }
 
   if (update.Action === ACTION_GAME_FINALISED) {
@@ -140,6 +178,16 @@ export function applyScoresUpdate(
       if (state.events.length > MAX_EVENTS_PER_FIXTURE) {
         state.events.splice(0, state.events.length - MAX_EVENTS_PER_FIXTURE);
       }
+      // A placed event feeds the pitch "explosion" and resolves any pre-event
+      // shimmer that was anticipating it. event.kind is narrowed to EventKind here.
+      state.eventMarkerSeq += 1;
+      state.lastEvent = {
+        id: state.eventMarkerSeq,
+        kind: event.kind,
+        team: participantToTeam(event.participant),
+        clockSeconds: event.clockSeconds,
+      };
+      state.pendingSignal = null;
     }
   }
 

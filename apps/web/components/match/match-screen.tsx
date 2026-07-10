@@ -19,6 +19,7 @@ import { Eyebrow } from '../ui/eyebrow';
 import { Card, Tray } from '../ui/surface';
 import { buttonClassName } from '../ui/button-styles';
 import { ScoreCard } from './score-card';
+import { PitchView } from './pitch-view';
 import { CallCard } from './call-card';
 import { LatencyHud } from './latency-hud';
 import { EventFeed } from './event-feed';
@@ -30,6 +31,12 @@ import { formatClockMinutes, formatPoints } from '../../lib/format';
 
 // Punch + ring flash length on a fresh lock (sheet motion tokens).
 const JUST_LOCKED_MS = 500;
+
+// The sponsored-call ad unit (monetization surface, see docs/TECH_DOC.md): one
+// call category carries a sample "presented by" label. Sample brand for the
+// demo, not a real sponsorship; the point is the ad slot exists.
+const SPONSORED_CATEGORY: CallCategory = 'corner';
+const SAMPLE_SPONSOR = 'Volt';
 
 export type MatchScreenMode =
   | { kind: 'live'; fixtureId: number }
@@ -400,6 +407,7 @@ export function MatchScreen({
                     lockError={lockErrors.get(option.category)}
                     justLocked={justLockedCategory === option.category}
                     enterDelayMs={index * 40}
+                    sponsor={option.category === SPONSORED_CATEGORY ? SAMPLE_SPONSOR : undefined}
                     onLock={(picked) => {
                       void handleLock(picked);
                     }}
@@ -444,6 +452,26 @@ export function MatchScreen({
         startTimeMs={startTimeMs}
         displayClockSeconds={displayClockSeconds}
       />
+
+      {payload.phase !== 'pre' || payload.matchResult !== null ? (
+        <div className="mt-5">
+          <Tray className="p-2">
+            <div className="mx-2.5 mb-2 mt-1.5 flex">
+              <Eyebrow>Live pitch</Eyebrow>
+            </div>
+            <Card className="px-4 py-3.5">
+              <PitchView
+                momentum={payload.momentum}
+                matchResult={payload.matchResult}
+                participant1={participant1}
+                participant2={participant2}
+                phase={payload.phase}
+                connectionLost={connection === 'lost'}
+              />
+            </Card>
+          </Tray>
+        </div>
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-start gap-5">
         <div className="flex min-w-0 flex-[2_1_560px] flex-col gap-5">

@@ -55,7 +55,11 @@ export function ReplayTapeRow({ tape }: { tape: ReplayTapeSummary }) {
             {tape.participant2 === '' ? tape.participant1 : `${tape.participant1} vs ${tape.participant2}`}
           </p>
           <span className="tabular font-mono text-xs text-ink-muted">
-            {tape.competition} · {formatTapeDate(tape.updatedAtMs)}
+            {tape.competition} ·{' '}
+            {/* The date is locale-formatted, so the server (Node locale) and the
+                client (browser locale) can render different strings; the client
+                value is authoritative here. */}
+            <span suppressHydrationWarning>{formatTapeDate(tape.updatedAtMs)}</span>
           </span>
         </div>
         <div className="flex flex-none items-center gap-3.5">

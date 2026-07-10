@@ -5,3 +5,4 @@ export * from './odds.js';
 export * from './catalog.js';
 export * from './bookie.js';
 export * from './calibration.js';
+export * from './momentum.js';

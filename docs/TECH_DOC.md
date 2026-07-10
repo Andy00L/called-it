@@ -163,7 +163,8 @@ The monetization path, in order of proximity:
 
 1. **Sponsored call windows.** "Corner in the next 10 minutes, presented by
    [brand]" is a native ad unit priced by attention at the most tense moments
-   of a match.
+   of a match. Shown in the app today as a sample "presented by" label on the
+   corner call (a demo of the ad slot, not a real sponsorship).
 2. **Premium private leagues.** Free public play; paid league creation for
    friend groups, offices, and creators (custom prizes, season-long tables).
 3. **B2B white-label.** Broadcasters and rights holders embed the call deck,

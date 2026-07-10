@@ -70,8 +70,23 @@ export default async function LobbyPage() {
     );
   }
 
+  // Longest match footprint from kickoff: regulation, stoppage, extra time,
+  // and a shootout fit comfortably inside four hours.
+  const MATCH_MAX_DURATION_MS = 4 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  // The fixtures list can carry a stale 'pre' phase: a worker restart resets
+  // in-memory match state while the catalog still remembers the fixture. So
+  // "still to be played" is judged by phase AND the clock, and rows sort by
+  // kickoff so the programme reads top to bottom.
+  const isStillToBePlayed = (phase: string, startTimeMs: number): boolean =>
+    phase !== 'finished' && startTimeMs + MATCH_MAX_DURATION_MS > nowMs;
   const liveFixtures = fixturesResult.fixtures.filter((fixture) => fixture.phase === 'live');
-  const upcomingFixtures = fixturesResult.fixtures.filter((fixture) => fixture.phase === 'pre');
+  const upcomingFixtures = fixturesResult.fixtures
+    .filter(
+      (fixture) =>
+        fixture.phase === 'pre' && isStillToBePlayed(fixture.phase, fixture.startTimeMs),
+    )
+    .sort((first, second) => first.startTimeMs - second.startTimeMs);
   // Tapes captured before the durable name cache shipped have no team names
   // (the worker falls back to "Fixture N" with an empty participant2), and a
   // pre-match fixture grows an odds-only tape before kickoff; the lobby
@@ -79,7 +94,7 @@ export default async function LobbyPage() {
   // programme.
   const notFinishedIds = new Set(
     fixturesResult.fixtures
-      .filter((fixture) => fixture.phase !== 'finished')
+      .filter((fixture) => isStillToBePlayed(fixture.phase, fixture.startTimeMs))
       .map((fixture) => fixture.fixtureId),
   );
   const tapes = tapesResult.ok

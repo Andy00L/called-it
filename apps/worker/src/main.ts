@@ -29,6 +29,11 @@ import { createGameService, type GameService } from './game.js';
 import { createMemoryPersistence } from './persistence-memory.js';
 import { createSupabasePersistence } from './persistence-supabase.js';
 
+// Milliseconds the clean shutdown gets before the process force-exits 0.
+// Railway marks an instance crashed when it outlives the stop grace period,
+// which produced a false "Deploy Crashed" email on every redeploy.
+const SHUTDOWN_GRACE_MS = 5000;
+
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -459,6 +464,15 @@ async function main(): Promise<void> {
     void ingestPromise.then(() => {
       console.log('[shutdown] ingest stopped, bye');
     });
+    // A lingering handle (an SSE socket mid-teardown) can keep the event
+    // loop alive past the platform's grace period. Everything above already
+    // stopped cleanly; exit 0 is honest after this bound. unref keeps the
+    // timer itself from delaying an otherwise natural exit.
+    const forceExitTimer = setTimeout(() => {
+      console.log('[shutdown] bounded exit: a handle outlived the stop, exiting 0');
+      process.exit(0);
+    }, SHUTDOWN_GRACE_MS);
+    forceExitTimer.unref();
   };
   process.once('SIGINT', () => shutdown('SIGINT'));
   process.once('SIGTERM', () => shutdown('SIGTERM'));

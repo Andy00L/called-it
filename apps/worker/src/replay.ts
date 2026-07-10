@@ -237,12 +237,26 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
     }, delayMs);
   };
 
+  /** True while the tape has not reached kickoff yet. */
+  const isBeforeKickoff = (session: ReplaySession): boolean => {
+    const state = getMatchState(session.store, session.fixtureId);
+    return state === undefined || state.phase === 'pre';
+  };
+
   const runStep = async (session: ReplaySession): Promise<void> => {
     if (!sessions.has(session.id)) {
       return;
     }
     try {
-      const nextDelayMs = await applyNextEntry(session);
+      let nextDelayMs = await applyNextEntry(session);
+      // Fast-forward the pre-match head: recorders capture hours of warm-up
+      // odds before the whistle; a replay viewer lands at kickoff instead of
+      // sitting through them at replay speed. Each apply awaits, so the
+      // burst yields to the event loop; the session-liveness check lets
+      // stopAll interrupt a burst.
+      while (nextDelayMs !== null && isBeforeKickoff(session) && sessions.has(session.id)) {
+        nextDelayMs = await applyNextEntry(session);
+      }
       if (nextDelayMs === null) {
         await finishSession(session);
         return;

@@ -1,8 +1,9 @@
 # TxLINE API feedback (CALLED IT build log)
 
 Running notes on the TxLINE developer experience, kept as we build. This is the feedback
-deliverable for the submission. Environment: devnet, Service Level 1 (60s delayed World Cup),
-observed 2026-07-02.
+deliverable for the submission. Environments: devnet, Service Level 1 (60s delayed World Cup),
+observed 2026-07-02; mainnet Service Level 12 (real-time) in 24/7 production use since
+2026-07-04; Txoracle stat-validation exercised on mainnet on 2026-07-09.
 
 ## What worked well
 
@@ -73,6 +74,46 @@ observed 2026-07-02.
    correctly, and `clock_adjustment` matters to anyone keying UI off the clock, so
    documenting them would be high value.
 
+## Oracle stat-validation (mainnet, observed 2026-07-09)
+
+The headline first: the full proof chain works. `scores/stat-validation` returns a Merkle
+proof that `Txoracle.validate_stat(...).view()` (read-only, free) confirms against the
+`daily_scores_roots` PDA. We verified our settled finals (goals, corners, cards) for a real
+finished match, including a negative control (value + 1 -> false). A consumer app can prove
+its displayed outcomes against TxODDS's own on-chain roots with no wallet cost. That is a
+strong, differentiating capability. The frictions below are all documentation gaps around it.
+
+9. **Binary proof fields are raw JSON byte arrays; the spec types them as strings.**
+   In the `scores/stat-validation` response, the summary root, proof nodes, and related
+   binary fields arrive as arrays of numbers (raw bytes). A client generated from the
+   OpenAPI spec fails to parse them. Easy to decode once discovered, but the spec should
+   match the serializer.
+
+10. **The statKey encoding is undocumented.** We derived it empirically:
+    `key = period * 1000 + base`, with periods 0=Total, 1=H1, 2=HT, 3=H2, 4..7=ET1/ET2/PE/
+    ET-Total, and bases 1=P1 goals, 2=P2 goals, 3=P1 yellows, 4=P2 yellows, 5=P1 reds,
+    6=P2 reds, 7=P1 corners, 8=P2 corners. A small table in the docs would save every
+    integrator a discovery session.
+
+11. **The response `period` field is always 100** (an internal id), regardless of the period
+    encoded in the requested statKey, and it must be passed through unchanged into
+    `validate_stat`. One line in the docs would prevent second-guessing.
+
+12. **The mainnet `fixtures/snapshot` window is future-only.** Finished fixtures drop out of
+    the snapshot, so team names for a match that just ended cannot be fetched after the
+    fact. Any product joining stats to names post-match needs its own cache (we persist a
+    fixtures-seen file). Documenting the window, or offering a fixture lookup by id, would
+    remove that burden.
+
+13. **Daily root posting cadence is undocumented.** The `daily_scores_roots` entry for an
+    epoch day appears well after the day's matches end: our receipts show "proof pending"
+    on match night and "VERIFIED" the next morning. Publishing the posting schedule would
+    let products set user expectations precisely.
+
+14. **The mainnet Txoracle IDL was not fetchable on-chain.** `anchor idl fetch` returned
+    nothing for the mainnet program, so we carry a local IDL copy in the repo. Publishing
+    the IDL on-chain or in the docs would remove a manual, error-prone step.
+
 ## Confirmed schema (ground truth, for our own reference)
 
 - Score event top-level (PascalCase): `FixtureId, Ts, Seq, Id, Type, Action, GameState,
@@ -88,9 +129,14 @@ observed 2026-07-02.
 - Odds markets seen: `1X2_PARTICIPANT_RESULT`, `ASIANHANDICAP_PARTICIPANT_GOALS`,
   `OVERUNDER_PARTICIPANT_GOALS`. `Pct` aligns with `PriceNames` / `Prices`.
 
-## Still to verify (needs a live match)
+## Verified live on mainnet SL12 (24/7 since 2026-07-04)
 
-- Live SSE latency on SL12 (mainnet real-time). Target: goal visible in-app < 5s.
-- `possible` / `PossessionType` frequency and lead time during live play (drives the
-  anticipation UX).
-- JWT/token behavior across long-lived stream reconnects (401 handling).
+- **Latency target met.** Our worker measures feed latency continuously (event `Ts` to
+  arrival): odds stream p50 around 245 ms and p95 around 475 ms on rolling samples; scores
+  events during live play typically arrive in 150 to 500 ms. Goal-to-screen in the app is
+  comfortably under the 5 s target; the in-app latency HUD shows last/p50/p95 per stream.
+- **Long-lived streams behave.** SSE reconnect plus guest JWT re-acquisition on 401 are
+  wired in; the worker has run continuously since 2026-07-04 across multiple redeploys with
+  no manual token intervention.
+- Still open: quantifying `possible` / `PossessionType` pre-signal lead time during live
+  play (we display the danger states but have not measured how far they lead the event).

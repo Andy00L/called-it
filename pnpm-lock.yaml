@@ -71,6 +71,9 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
+      tweetnacl:
+        specifier: ^1.0.3
+        version: 1.0.3
     devDependencies:
       '@types/bn.js':
         specifier: ^5.2.0

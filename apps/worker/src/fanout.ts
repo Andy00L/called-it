@@ -1,10 +1,16 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { err, ok, type Result } from '@calledit/txline';
+import { createRateLimiter, type RateLimiter } from './rate-limit.js';
 
 /**
  * Transport-only fan-out: JSON snapshots, one SSE channel per fixture, and a
  * thin JSON API surface delegated to the game layer. Payload composition and
  * game rules live in main.ts / game.ts; this module never inspects payloads.
+ *
+ * Abuse controls live here because this is the only public ingress: per-IP
+ * rate limits on POST, per-IP and global caps on SSE connections, and slow
+ * consumer eviction so a client that stops reading cannot grow the process
+ * memory of a 24/7 worker.
  */
 
 // SSE comment cadence; keeps idle sockets alive through proxies.
@@ -12,6 +18,26 @@ const KEEP_ALIVE_INTERVAL_MS = 15000;
 
 // JSON body cap for POST requests; lock payloads are tiny (product choice).
 const MAX_BODY_BYTES = 10000;
+
+// Rate limits per client IP (product choice for a free-to-play MVP; no env).
+// Guest creation writes a durable row on a free-tier database, so it is the
+// stricter bucket; other actions (picks, handle, replay control) share a
+// looser one that still blocks scripted floods.
+const GUEST_CREATE_WINDOW_MS = 60_000;
+const GUEST_CREATE_MAX = 12;
+const ACTION_WINDOW_MS = 60_000;
+const ACTION_MAX = 40;
+
+// SSE connection caps: a global ceiling protects the small Railway box, a
+// per-IP ceiling stops one client from hoarding the pool. A viewer needs at
+// most a couple (a match tab plus a replay tab).
+const MAX_SSE_CLIENTS_TOTAL = 400;
+const MAX_SSE_CLIENTS_PER_IP = 8;
+
+// A client whose outbound buffer passes this is not draining (dead tab, stalled
+// network): drop it instead of letting the buffer grow. EventSource reconnects
+// on its own, so a transient slow spell self-heals on the client side.
+const MAX_SSE_CLIENT_BUFFER_BYTES = 512 * 1024;
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -61,6 +87,24 @@ function replayChannelKey(sessionId: string): string {
   return `replay:${sessionId}`;
 }
 
+/**
+ * Client identity for rate limiting and connection caps. Railway terminates
+ * TLS at a proxy, so the real client is the first hop of x-forwarded-for; the
+ * socket address is the proxy otherwise. Not spoof-proof (an attacker can set
+ * the header), but adequate abuse control for a public free game.
+ */
+function clientKeyOf(request: IncomingMessage): string {
+  const forwarded = request.headers['x-forwarded-for'];
+  const headerValue = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  if (typeof headerValue === 'string') {
+    const firstHop = headerValue.split(',')[0]?.trim();
+    if (firstHop !== undefined && firstHop !== '') {
+      return firstHop;
+    }
+  }
+  return request.socket.remoteAddress ?? 'unknown';
+}
+
 function sendJson(response: ServerResponse, statusCode: number, body: unknown): void {
   const text = JSON.stringify(body);
   response.writeHead(statusCode, {
@@ -68,6 +112,16 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown): 
     ...CORS_HEADERS,
   });
   response.end(text);
+}
+
+/** 429 with a Retry-After hint (seconds), distinct from other error shapes. */
+function sendRateLimited(response: ServerResponse, retryAfterMs: number): void {
+  response.writeHead(429, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Retry-After': String(Math.max(1, Math.ceil(retryAfterMs / 1000))),
+    ...CORS_HEADERS,
+  });
+  response.end(JSON.stringify({ error: 'rate_limited' }));
 }
 
 /** Read a JSON request body with a hard size cap. */
@@ -80,6 +134,8 @@ function readJsonBody(request: IncomingMessage): Promise<Result<unknown, string>
       if (totalBytes > MAX_BODY_BYTES) {
         request.removeAllListeners('data');
         request.removeAllListeners('end');
+        // Stop absorbing the upload: the sender is over the cap already.
+        request.destroy();
         resolvePromise(err('body_too_large'));
         return;
       }
@@ -103,6 +159,18 @@ function readJsonBody(request: IncomingMessage): Promise<Result<unknown, string>
 
 export function createFanout(deps: FanoutDeps): Fanout {
   const clientsByChannel = new Map<string, Set<ServerResponse>>();
+  // SSE accounting for the connection caps, kept O(1) alongside the channel map.
+  const sseCountByIp = new Map<string, number>();
+  let totalSseClients = 0;
+
+  const guestRateLimiter: RateLimiter = createRateLimiter({
+    windowMs: GUEST_CREATE_WINDOW_MS,
+    maxRequests: GUEST_CREATE_MAX,
+  });
+  const actionRateLimiter: RateLimiter = createRateLimiter({
+    windowMs: ACTION_WINDOW_MS,
+    maxRequests: ACTION_MAX,
+  });
 
   const removeClient = (channelKey: string, response: ServerResponse): void => {
     const clients = clientsByChannel.get(channelKey);
@@ -115,12 +183,61 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
   };
 
+  const releaseSseSlot = (clientKey: string): void => {
+    totalSseClients = Math.max(0, totalSseClients - 1);
+    const current = sseCountByIp.get(clientKey);
+    if (current === undefined) {
+      return;
+    }
+    if (current <= 1) {
+      sseCountByIp.delete(clientKey);
+    } else {
+      sseCountByIp.set(clientKey, current - 1);
+    }
+  };
+
+  const dropSlowClient = (channelKey: string, client: ServerResponse): void => {
+    // Remove from the channel first so no further frame is written this tick;
+    // the request 'close' handler releases the SSE slot when the socket dies.
+    removeClient(channelKey, client);
+    client.destroy();
+  };
+
+  /** Write one frame to a channel, evicting clients that stopped draining. */
+  const writeFrame = (channelKey: string, clients: Set<ServerResponse>, frame: string): void => {
+    const slowClients: ServerResponse[] = [];
+    for (const client of clients) {
+      if (client.writableEnded) {
+        slowClients.push(client);
+        continue;
+      }
+      client.write(frame);
+      if (client.writableLength > MAX_SSE_CLIENT_BUFFER_BYTES) {
+        slowClients.push(client);
+      }
+    }
+    for (const client of slowClients) {
+      dropSlowClient(channelKey, client);
+    }
+  };
+
   const openSseChannel = (
     request: IncomingMessage,
     response: ServerResponse,
     channelKey: string,
+    clientKey: string,
     initialPayload: unknown | null,
   ): void => {
+    if (totalSseClients >= MAX_SSE_CLIENTS_TOTAL) {
+      sendJson(response, 503, { error: 'sse_capacity' });
+      return;
+    }
+    const perIpCount = sseCountByIp.get(clientKey) ?? 0;
+    if (perIpCount >= MAX_SSE_CLIENTS_PER_IP) {
+      sendJson(response, 429, { error: 'sse_too_many_connections' });
+      return;
+    }
+
     response.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -132,12 +249,26 @@ export function createFanout(deps: FanoutDeps): Fanout {
     const clients = clientsByChannel.get(channelKey) ?? new Set<ServerResponse>();
     clients.add(response);
     clientsByChannel.set(channelKey, clients);
-    request.on('close', () => removeClient(channelKey, response));
+    totalSseClients += 1;
+    sseCountByIp.set(clientKey, perIpCount + 1);
+    let released = false;
+    request.on('close', () => {
+      removeClient(channelKey, response);
+      // Guard against a double release if the socket emits close twice.
+      if (!released) {
+        released = true;
+        releaseSseSlot(clientKey);
+      }
+    });
 
     if (initialPayload !== null) {
       response.write(`event: state\ndata: ${JSON.stringify(initialPayload)}\n\n`);
     }
   };
+
+  /** Bucket a POST by cost; guest creation is the strict one. */
+  const rateLimiterForPost = (segments: string[]): RateLimiter =>
+    segments[0] === 'players' && segments[1] === 'guest' ? guestRateLimiter : actionRateLimiter;
 
   const routeRequest = async (
     request: IncomingMessage,
@@ -156,9 +287,16 @@ export function createFanout(deps: FanoutDeps): Fanout {
 
     const requestUrl = new URL(request.url ?? '/', 'http://fanout.local');
     const segments = requestUrl.pathname.split('/').filter((segment) => segment !== '');
+    const clientKey = clientKeyOf(request);
 
     let body: unknown = undefined;
     if (method === 'POST') {
+      // Rate-limit before reading the body, so a flood is rejected cheaply.
+      const decision = rateLimiterForPost(segments).check(clientKey);
+      if (!decision.allowed) {
+        sendRateLimited(response, decision.retryAfterMs);
+        return;
+      }
       const bodyResult = await readJsonBody(request);
       if (!bodyResult.ok) {
         sendJson(response, bodyResult.error === 'body_too_large' ? 413 : 400, {
@@ -194,7 +332,13 @@ export function createFanout(deps: FanoutDeps): Fanout {
         return;
       }
       if (segments[0] === 'live') {
-        openSseChannel(request, response, liveChannelKey(fixtureId), deps.buildLivePayload(fixtureId));
+        openSseChannel(
+          request,
+          response,
+          liveChannelKey(fixtureId),
+          clientKey,
+          deps.buildLivePayload(fixtureId),
+        );
         return;
       }
       const statePayload = deps.buildStatePayload(fixtureId);
@@ -219,7 +363,13 @@ export function createFanout(deps: FanoutDeps): Fanout {
         sendJson(response, 404, { error: 'unknown_session' });
         return;
       }
-      openSseChannel(request, response, replayChannelKey(sessionId), deps.buildReplayPayload(sessionId));
+      openSseChannel(
+        request,
+        response,
+        replayChannelKey(sessionId),
+        clientKey,
+        deps.buildReplayPayload(sessionId),
+      );
       return;
     }
     sendJson(response, 404, {
@@ -239,10 +389,8 @@ export function createFanout(deps: FanoutDeps): Fanout {
   });
 
   const keepAliveTimer = setInterval(() => {
-    for (const clients of clientsByChannel.values()) {
-      for (const client of clients) {
-        client.write(': keep-alive\n\n');
-      }
+    for (const [channelKey, clients] of clientsByChannel) {
+      writeFrame(channelKey, clients, ': keep-alive\n\n');
     }
   }, KEEP_ALIVE_INTERVAL_MS);
 
@@ -252,9 +400,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
       return;
     }
     const frame = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
-    for (const client of clients) {
-      client.write(frame);
-    }
+    writeFrame(channelKey, clients, frame);
   };
 
   const broadcastEvent = (fixtureId: number, eventName: string, payload: unknown): void => {
@@ -281,14 +427,6 @@ export function createFanout(deps: FanoutDeps): Fanout {
     broadcastReplayEvent(sessionId, 'state', payload);
   };
 
-  const clientCount = (): number => {
-    let total = 0;
-    for (const clients of clientsByChannel.values()) {
-      total += clients.size;
-    }
-    return total;
-  };
-
   const close = (): void => {
     clearInterval(keepAliveTimer);
     for (const clients of clientsByChannel.values()) {
@@ -297,6 +435,8 @@ export function createFanout(deps: FanoutDeps): Fanout {
       }
     }
     clientsByChannel.clear();
+    sseCountByIp.clear();
+    totalSseClients = 0;
     server.close();
   };
 
@@ -306,7 +446,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
     broadcastEvent,
     broadcastReplay,
     broadcastReplayEvent,
-    clientCount,
+    clientCount: () => totalSseClients,
     close,
   };
 }

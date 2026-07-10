@@ -42,9 +42,11 @@ const REPLAY_SPEEDS = [1, 10, 60] as const;
 // the Railway box is small (product choice, revisit with real usage).
 const MAX_ACTIVE_SESSIONS = 6;
 
-// Delay clamps between applied tape entries. The floor keeps a burst of
-// frames from flooding SSE clients; the ceiling compresses dead air (half
-// time is 15 real minutes of nothing even at 1x).
+// Pacing clamps. The floor is the pump tick: entries whose scaled gaps fit
+// inside one tick are applied together with a single SSE frame at the end,
+// so the floor caps the frame rate, never the playback speed (a per-entry
+// floor capped 60x near 9x through dense in-running odds). The ceiling
+// compresses dead air (half time is 15 real minutes of nothing even at 1x).
 const MIN_STEP_DELAY_MS = 15;
 const MAX_STEP_DELAY_MS = 10000;
 
@@ -173,11 +175,11 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
     }
   };
 
-  /** Apply the entry under the cursor; advance; return the delay to the next step. */
-  const applyNextEntry = async (session: ReplaySession): Promise<number | null> => {
+  /** Apply the entry under the cursor; advance. True when match state changed. */
+  const applyNextEntry = async (session: ReplaySession): Promise<boolean> => {
     const entry = session.entries[session.cursor];
     if (entry === undefined) {
-      return null;
+      return false;
     }
     session.cursor += 1;
     session.lastActivityMs = nowMs();
@@ -195,17 +197,20 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
         applyOddsPayload(session.store, payload, nowMs());
       }
       await session.game.resolveFixture(session.fixtureId);
-      deps.onState(session.id);
-    } else {
-      session.skippedEntryCount += 1;
+      return true;
     }
+    session.skippedEntryCount += 1;
+    return false;
+  };
 
+  /** Real-ms wait to the next entry at the session speed, unclamped; null at tape end. */
+  const scaledGapToNextMs = (session: ReplaySession): number | null => {
+    const appliedEntry = session.entries[session.cursor - 1];
     const nextEntry = session.entries[session.cursor];
-    if (nextEntry === undefined) {
+    if (nextEntry === undefined || appliedEntry === undefined) {
       return null;
     }
-    const originalGapMs = Math.max(0, nextEntry.receivedAtMs - entry.receivedAtMs);
-    return Math.min(MAX_STEP_DELAY_MS, Math.max(MIN_STEP_DELAY_MS, originalGapMs / session.speed));
+    return Math.max(0, nextEntry.receivedAtMs - appliedEntry.receivedAtMs) / session.speed;
   };
 
   /** End of tape: force final verdicts so no replay pick stays pending. */
@@ -248,20 +253,44 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
       return;
     }
     try {
-      let nextDelayMs = await applyNextEntry(session);
+      let stateChanged = await applyNextEntry(session);
       // Fast-forward the pre-match head: recorders capture hours of warm-up
       // odds before the whistle; a replay viewer lands at kickoff instead of
       // sitting through them at replay speed. Each apply awaits, so the
       // burst yields to the event loop; the session-liveness check lets
       // stopAll interrupt a burst.
-      while (nextDelayMs !== null && isBeforeKickoff(session) && sessions.has(session.id)) {
-        nextDelayMs = await applyNextEntry(session);
+      while (
+        session.cursor < session.entries.length &&
+        isBeforeKickoff(session) &&
+        sessions.has(session.id)
+      ) {
+        stateChanged = (await applyNextEntry(session)) || stateChanged;
       }
-      if (nextDelayMs === null) {
+      // Batch dense stretches: entries whose scaled gaps fit inside one pump
+      // tick are applied together, so 60x stays 60x through in-running odds
+      // bursts. The single frame below caps what SSE clients see per tick.
+      let scaledGapMs = scaledGapToNextMs(session);
+      let batchedGapMs = 0;
+      while (
+        scaledGapMs !== null &&
+        batchedGapMs + scaledGapMs < MIN_STEP_DELAY_MS &&
+        sessions.has(session.id)
+      ) {
+        batchedGapMs += scaledGapMs;
+        stateChanged = (await applyNextEntry(session)) || stateChanged;
+        scaledGapMs = scaledGapToNextMs(session);
+      }
+      if (stateChanged && sessions.has(session.id)) {
+        deps.onState(session.id);
+      }
+      if (scaledGapMs === null) {
         await finishSession(session);
         return;
       }
-      scheduleNextStep(session, nextDelayMs);
+      scheduleNextStep(
+        session,
+        Math.min(MAX_STEP_DELAY_MS, Math.max(MIN_STEP_DELAY_MS, batchedGapMs + scaledGapMs)),
+      );
     } catch (cause) {
       const messageText = cause instanceof Error ? cause.message : String(cause);
       console.error(`[runStep] replay ${session.id}: ${messageText}`);

@@ -164,6 +164,48 @@ test('a replayed match settles a locked call exactly as the engine says it shoul
   }
 });
 
+test('dense tape stretches replay at full speed by batching entries per tick', async () => {
+  const deck = writeRealTape('deck-speed');
+  // Append a dense in-running stretch: 240 records 100ms apart. At 60x each
+  // scaled gap is ~1.7ms; the old per-entry 15ms floor needed one tick per
+  // entry (280+ ticks, ~9x effective speed). Batching fits ~9 entries per
+  // tick, so the drain lands near 40 + 240/9 ticks.
+  const template = orderedUpdates.at(-1);
+  assert.ok(template);
+  const templateSeq = template.Seq ?? 0;
+  const denseEntryCount = 240;
+  const denseBaseTs = template.Ts + 1000;
+  for (let index = 0; index < denseEntryCount; index += 1) {
+    const appended = appendTapeEntry(deck, realFixtureId, {
+      receivedAtMs: denseBaseTs + index * 100,
+      stream: 'scores',
+      payload: { ...template, Ts: denseBaseTs + index * 100, Seq: templateSeq + 1 + index },
+    });
+    assert.ok(appended.ok);
+  }
+
+  const harness = createHarness(deck);
+  try {
+    const created = await harness.manager.createSession(realFixtureId, 60);
+    assert.ok(created.ok);
+    const sessionId = created.value.session.sessionId;
+    let tickCount = 0;
+    while (await harness.stepOnce()) {
+      tickCount += 1;
+    }
+    const info = harness.manager.sessionInfo(sessionId);
+    assert.ok(info.ok);
+    assert.equal(info.value.finished, true);
+    assert.equal(info.value.appliedEntries, info.value.totalEntries);
+    assert.ok(
+      tickCount < 150,
+      `expected batched pacing, got ${tickCount} ticks for ${info.value.totalEntries} entries`,
+    );
+  } finally {
+    harness.manager.stopAll();
+  }
+});
+
 test('replay latency reports the historical feed latency, not replay timing', async () => {
   const deck = writeRealTape('deck-latency');
   const harness = createHarness(deck);

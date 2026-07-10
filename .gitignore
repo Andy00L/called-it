@@ -14,8 +14,14 @@ wallet.json
 spike/logs/
 *.ndjson
 
+# local coding-standards kit; governs sessions, not part of the product
+.claude/
+
 # throwaway probes and scratch output
 .scratch/
+
+# Claude Design loop workspace (palette card, prompt pack, returned exports)
+ui-design/
 
 # Windows download artifacts (WSL exposes NTFS alternate data streams as files)
 *Zone.Identifier

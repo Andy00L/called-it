@@ -1,7 +1,8 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import type { ReceiptPayload } from '@calledit/contracts';
-import { workerUrl } from '../../../lib/api';
+import { fetchReceipt, isPickIdShaped } from '../../../lib/api';
+import { formatPoints, formatProbability } from '../../../lib/format';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Tray } from '../../../components/ui/surface';
 import { buttonClassName } from '../../../components/ui/button-styles';
@@ -10,6 +11,36 @@ import { ReceiptActions } from '../../../components/receipt/receipt-actions';
 
 function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
   return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;
+}
+
+/** Link-unfurl metadata; the card image itself is ./opengraph-image.tsx. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ pickId: string }>;
+}): Promise<Metadata> {
+  // Crawlers always get a card, even for a dead or unloadable link.
+  const fallback: Metadata = { twitter: { card: 'summary_large_image' } };
+  const { pickId } = await params;
+  if (!isPickIdShaped(pickId)) {
+    return fallback;
+  }
+  const result = await fetchReceipt(pickId);
+  if (!result.ok) {
+    return fallback;
+  }
+  const { pick, settlement } = result.receipt;
+  const resultText =
+    settlement === null
+      ? 'Open, settles live.'
+      : settlement.outcome === 'hit'
+        ? `HIT +${formatPoints(settlement.pointsAwarded)} pts, anchored on Solana.`
+        : 'MISS, 0 pts.';
+  return {
+    title: `CALLED IT: ${pick.claim}`,
+    description: `Locked at ${formatProbability(pick.probabilityFraction)}. ${resultText}`,
+    twitter: { card: 'summary_large_image' },
+  };
 }
 
 function WordmarkBar() {
@@ -34,27 +65,15 @@ export default async function ReceiptPage({
 }) {
   const { pickId } = await params;
   // Pick ids are UUIDs; anything else is not found by construction.
-  if (!/^[0-9a-f-]{36}$/i.test(pickId)) {
+  if (!isPickIdShaped(pickId)) {
     notFound();
   }
 
-  let receipt: ReceiptPayload | null = null;
-  let feedDown = false;
-  try {
-    const response = await fetch(`${workerUrl()}/receipts/${pickId}`, { cache: 'no-store' });
-    if (response.status === 404) {
+  const result = await fetchReceipt(pickId);
+  if (!result.ok) {
+    if (result.reason === 'not_found') {
       notFound();
     }
-    if (!response.ok) {
-      feedDown = true;
-    } else {
-      receipt = (await response.json()) as ReceiptPayload;
-    }
-  } catch {
-    feedDown = true;
-  }
-
-  if (feedDown || receipt === null) {
     return (
       <main className="mx-auto w-full max-w-[640px] px-5 pb-20 sm:px-7.5">
         <WordmarkBar />
@@ -75,6 +94,7 @@ export default async function ReceiptPage({
     );
   }
 
+  const receipt = result.receipt;
   const explorerUrl =
     receipt.commitment !== null && receipt.commitment.memoTxSig !== null
       ? explorerTxUrl(receipt.commitment.memoTxSig, receipt.network)

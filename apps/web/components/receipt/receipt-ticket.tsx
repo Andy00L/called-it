@@ -1,5 +1,10 @@
 import type { OracleVerification, ReceiptPayload } from '@calledit/contracts';
-import { formatClockMinutes, formatPoints, formatProbability } from '../../lib/format';
+import {
+  formatClockMinutes,
+  formatPoints,
+  formatProbability,
+  truncateHash,
+} from '../../lib/format';
 
 /**
  * The thermal receipt (signature element 2, docs/UI_DESIGN_SYSTEM.md): the
@@ -7,10 +12,6 @@ import { formatClockMinutes, formatPoints, formatProbability } from '../../lib/f
  * rules, perforated edges, a deterministic slight rotation. Settlement
  * moments and the public /r/{id} page only.
  */
-
-function truncateHash(hashHex: string): string {
-  return hashHex.length <= 16 ? hashHex : `${hashHex.slice(0, 8)}...${hashHex.slice(-8)}`;
-}
 
 function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
   return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;

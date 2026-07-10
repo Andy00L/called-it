@@ -2,6 +2,7 @@ import type {
   FixtureLeaderboardEntry,
   FixtureSummary,
   LeaderboardEntry,
+  ReceiptPayload,
   ReplayTapeSummary,
 } from '@calledit/contracts';
 
@@ -85,4 +86,38 @@ export async function fetchFixtures(): Promise<FixturesResult> {
 export async function fetchReplayTapes(): Promise<ReplayTapesResult> {
   const result = await fetchJsonArray<ReplayTapeSummary>('/replay/tapes');
   return result.ok ? { ok: true, tapes: result.rows } : result;
+}
+
+/** Pick ids are UUIDs; cheap shape check before hitting the worker. */
+export function isPickIdShaped(pickId: string): boolean {
+  return /^[0-9a-f-]{36}$/i.test(pickId);
+}
+
+export type ReceiptFetchResult =
+  | { ok: true; receipt: ReceiptPayload }
+  | { ok: false; reason: 'not_found' | ListFailure };
+
+/**
+ * Public receipt fetch, shared by the receipt page, its generateMetadata,
+ * and the OG image route. React memoizes identical fetches within one
+ * render pass, so the page and its metadata cost a single worker call.
+ */
+export async function fetchReceipt(pickId: string): Promise<ReceiptFetchResult> {
+  let response: Response;
+  try {
+    response = await fetch(`${workerUrl()}/receipts/${pickId}`, { cache: 'no-store' });
+  } catch {
+    return { ok: false, reason: 'unreachable' };
+  }
+  if (response.status === 404) {
+    return { ok: false, reason: 'not_found' };
+  }
+  if (!response.ok) {
+    return { ok: false, reason: 'bad_status' };
+  }
+  try {
+    return { ok: true, receipt: (await response.json()) as ReceiptPayload };
+  } catch {
+    return { ok: false, reason: 'bad_payload' };
+  }
 }

@@ -44,6 +44,11 @@ export function formatMultiplier(multiplier: number): string {
   return `x${multiplier.toFixed(1)}`;
 }
 
+/** Hash or tx signature on tickets: first 8 + last 8 characters. */
+export function truncateHash(hashHex: string): string {
+  return hashHex.length <= 16 ? hashHex : `${hashHex.slice(0, 8)}...${hashHex.slice(-8)}`;
+}
+
 /**
  * Short team tag for the event feed column: "Argentina" -> "ARG". A display
  * derivation only; the feed carries participant indexes, not codes.

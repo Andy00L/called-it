@@ -13,6 +13,9 @@ const jetbrainsMonoFont = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  // sourceRef: deployed web app (plan WS4). Makes OG image URLs absolute in
+  // link unfurls; Vercel previews resolve their own host automatically.
+  metadataBase: new URL('https://called-it-web-murex.vercel.app'),
   title: 'CALLED IT',
   description:
     'Free live prediction game for the 2026 World Cup. Every call is priced by the market. Call it, prove it.',

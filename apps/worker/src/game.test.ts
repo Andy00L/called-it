@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { generateCalls, type CallOption } from '@calledit/engine';
-import type { OddsPayload, ScoresUpdate } from '@calledit/txline';
+import { err, type OddsPayload, type ScoresUpdate } from '@calledit/txline';
 import { createGameService, type SettlementNotice } from './game.js';
 import { createMemoryPersistence } from './persistence-memory.js';
+import type { PersistencePort } from './persistence.js';
 import {
   applyOddsPayload,
   applyScoresUpdate,
@@ -333,6 +334,103 @@ test('probability holds resolve against the live market at the target clock', as
   const hitPlayer = await hitHarness.persistence.getPlayer(hitGuest.playerId);
   assert.ok(hitPlayer.ok && hitPlayer.value !== null);
   assert.equal(hitPlayer.value.totalPoints, hitOption.potentialPoints);
+});
+
+test('guest creation refuses the reserved ghost name', async () => {
+  const harness = createHarness();
+  const titleCase = await harness.game.createGuestPlayer('The Bookie');
+  assert.ok(!titleCase.ok && titleCase.error === 'invalid_handle: reserved name');
+  const lowerCase = await harness.game.createGuestPlayer('the bookie');
+  assert.ok(!lowerCase.ok && lowerCase.error === 'invalid_handle: reserved name');
+});
+
+test('concurrent settlements of one player across fixtures keep the streak exact', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 200, 600);
+  primeLiveMatch(harness, 201, 600);
+  const guest = await createGuest(harness);
+  const cornerA = optionOf(catalogFor(harness, 200), 'corner');
+  const cornerB = optionOf(catalogFor(harness, 201), 'corner');
+  const lockA = await harness.game.lockPick(guest.playerId, guest.playerToken, 200, cornerA.id);
+  const lockB = await harness.game.lockPick(guest.playerId, guest.playerToken, 201, cornerB.id);
+  assert.ok(lockA.ok && lockB.ok);
+
+  pushScores(harness, {
+    FixtureId: 200,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: 700 },
+  });
+  pushScores(harness, {
+    FixtureId: 201,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: 700 },
+  });
+
+  // Resolve both fixtures concurrently. Without per-player serialization both
+  // settlements read streak 0, both write 1, and one increment is lost.
+  await Promise.all([harness.game.resolveFixture(200), harness.game.resolveFixture(201)]);
+
+  const player = await harness.persistence.getPlayer(guest.playerId);
+  assert.ok(player.ok && player.value !== null);
+  assert.equal(player.value.currentStreak, 2);
+  assert.equal(player.value.bestStreak, 2);
+});
+
+test('a transient settlement failure keeps the pick pending for the next pass', async () => {
+  const base = createMemoryPersistence();
+  let failPickId: string | null = null;
+  // Fail the human pick's first settle once, transiently (not "not pending").
+  const persistence: PersistencePort = {
+    ...base,
+    settlePick: async (input) => {
+      if (input.pickId === failPickId) {
+        failPickId = null;
+        return err('settle_pick failed: transient network blip');
+      }
+      return base.settlePick(input);
+    },
+  };
+  const store = createMatchStateStore();
+  const notices: SettlementNotice[] = [];
+  const game = createGameService({
+    persistence,
+    store,
+    onSettlement: (notice) => notices.push(notice),
+  });
+  const harness: TestHarness = { store, persistence, game, notices };
+
+  primeLiveMatch(harness, 300, 600);
+  const guest = await createGuest(harness);
+  const corner = optionOf(catalogFor(harness, 300), 'corner');
+  const locked = await harness.game.lockPick(guest.playerId, guest.playerToken, 300, corner.id);
+  assert.ok(locked.ok);
+  failPickId = locked.value.pick.id;
+
+  pushScores(harness, {
+    FixtureId: 300,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: 700 },
+  });
+
+  // First pass: the human settle fails transiently, so the pick stays pending.
+  await harness.game.resolveFixture(300);
+  assert.equal(harness.game.pendingPickCount(), 1);
+  let player = await harness.persistence.getPlayer(guest.playerId);
+  assert.ok(player.ok && player.value !== null);
+  assert.equal(player.value.totalPoints, 0);
+
+  // Second pass: it retries and settles, points credited exactly once.
+  await harness.game.resolveFixture(300);
+  assert.equal(harness.game.pendingPickCount(), 0);
+  player = await harness.persistence.getPlayer(guest.playerId);
+  assert.ok(player.ok && player.value !== null);
+  assert.equal(player.value.totalPoints, corner.potentialPoints);
 });
 
 test('a finished match sweeps every remaining pick to its final verdict', async () => {

@@ -28,7 +28,7 @@ import type {
   PickRecord,
   PlayerRecord,
 } from './persistence.js';
-import { PERSISTENCE_ERROR_DUPLICATE_CATEGORY } from './persistence.js';
+import { PERSISTENCE_ERROR_DUPLICATE_CATEGORY, PERSISTENCE_ERROR_NOT_PENDING } from './persistence.js';
 import { getMatchState, isInRunning, type MatchState, type MatchStateStore } from './state.js';
 
 /**
@@ -109,6 +109,35 @@ export function createGameService(deps: GameServiceDeps): GameService {
   const pendingByFixture = new Map<number, Map<string, PickRecord>>();
   const fixturesResolving = new Set<number>();
   const fixturesNeedingRerun = new Set<number>();
+  // Per-player settlement chain: streak is read-modify-written across two
+  // async hops (getPlayer then settlePick). Picks of one player in two
+  // fixtures can resolve concurrently, so serialize them per player to stop a
+  // lost streak increment. The worker is single-instance; an in-process chain
+  // is enough (a multi-instance deployment would move this into the RPC).
+  const settlementTailByPlayer = new Map<string, Promise<void>>();
+
+  const withPlayerSettlementLock = async (
+    playerId: string,
+    task: () => Promise<void>,
+  ): Promise<void> => {
+    const previous = settlementTailByPlayer.get(playerId) ?? Promise.resolve();
+    // Run after the previous settlement whether it fulfilled or rejected, so
+    // one failure never stalls the chain.
+    const run = previous.then(task, task);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    settlementTailByPlayer.set(playerId, tail);
+    void tail.then(() => {
+      // Drop the entry once this settlement is the chain's tail, so the map
+      // does not grow one entry per player forever.
+      if (settlementTailByPlayer.get(playerId) === tail) {
+        settlementTailByPlayer.delete(playerId);
+      }
+    });
+    return run;
+  };
 
   const cachePendingPick = (pick: PickRecord): void => {
     const fixturePicks =
@@ -162,30 +191,15 @@ export function createGameService(deps: GameServiceDeps): GameService {
     return resolveProbHold(pick.predicate, targetTeamProbability, state.clockSeconds);
   };
 
-  const settleOne = async (
+  /** Persist one settlement and, only on a definite outcome, drop it from the cache. */
+  const applySettlement = async (
     pick: PickRecord,
     outcome: 'hit' | 'miss',
     state: MatchState,
+    pointsAwarded: number,
+    multiplier: number,
+    newStreak: number,
   ): Promise<void> => {
-    let pointsAwarded = 0;
-    let multiplier = 1;
-    let newStreak = 0;
-
-    if (pick.playerId !== null) {
-      const fetched = await deps.persistence.getPlayer(pick.playerId);
-      if (!fetched.ok || fetched.value === null) {
-        console.error(`[settleOne] player ${pick.playerId} unavailable, pick ${pick.id} kept pending`);
-        return;
-      }
-      const player = fetched.value;
-      multiplier = outcome === 'hit' ? streakMultiplier(player.currentStreak) : 1;
-      pointsAwarded = outcome === 'hit' ? Math.round(pick.potentialPoints * multiplier) : 0;
-      newStreak = nextStreak(player.currentStreak, outcome);
-    } else {
-      // The Bookie plays flat: no streak, base points only.
-      pointsAwarded = outcome === 'hit' ? pick.potentialPoints : 0;
-    }
-
     const settled = await deps.persistence.settlePick({
       pickId: pick.id,
       playerId: pick.playerId,
@@ -197,12 +211,44 @@ export function createGameService(deps: GameServiceDeps): GameService {
     });
     if (!settled.ok) {
       console.error(`[settleOne] ${settled.error}`);
+      // Drop from the pending cache ONLY when the row is provably no longer
+      // pending (already settled by another path). A transient persistence
+      // failure keeps the pick cached so the next resolve pass retries it,
+      // instead of stranding it pending until a restart.
+      if (settled.error.startsWith(PERSISTENCE_ERROR_NOT_PENDING)) {
+        pendingByFixture.get(pick.fixtureId)?.delete(pick.id);
+      }
+      return;
     }
-    // Either settled or provably not pending anymore: drop from the cache.
     pendingByFixture.get(pick.fixtureId)?.delete(pick.id);
-    if (settled.ok) {
-      deps.onSettlement?.({ fixtureId: pick.fixtureId, pick, outcome, pointsAwarded, newStreak });
+    deps.onSettlement?.({ fixtureId: pick.fixtureId, pick, outcome, pointsAwarded, newStreak });
+  };
+
+  const settleOne = async (
+    pick: PickRecord,
+    outcome: 'hit' | 'miss',
+    state: MatchState,
+  ): Promise<void> => {
+    if (pick.playerId === null) {
+      // The Bookie plays flat: no streak, base points only, no player row to
+      // read-modify-write, so no lock needed.
+      const pointsAwarded = outcome === 'hit' ? pick.potentialPoints : 0;
+      await applySettlement(pick, outcome, state, pointsAwarded, 1, 0);
+      return;
     }
+    const playerId = pick.playerId;
+    await withPlayerSettlementLock(playerId, async () => {
+      const fetched = await deps.persistence.getPlayer(playerId);
+      if (!fetched.ok || fetched.value === null) {
+        console.error(`[settleOne] player ${playerId} unavailable, pick ${pick.id} kept pending`);
+        return;
+      }
+      const player = fetched.value;
+      const multiplier = outcome === 'hit' ? streakMultiplier(player.currentStreak) : 1;
+      const pointsAwarded = outcome === 'hit' ? Math.round(pick.potentialPoints * multiplier) : 0;
+      const newStreak = nextStreak(player.currentStreak, outcome);
+      await applySettlement(pick, outcome, state, pointsAwarded, multiplier, newStreak);
+    });
   };
 
   const resolveFixtureOnce = async (fixtureId: number): Promise<void> => {
@@ -238,6 +284,12 @@ export function createGameService(deps: GameServiceDeps): GameService {
         return err('invalid_handle: 2 to 24 letters, numbers, spaces, _ . -');
       }
       const handle = rawHandle.trim();
+      // Same reserved-name guard as rename: the ghost opponent must not be
+      // impersonable at creation either, or a guest could pose as The Bookie
+      // on the public leaderboard.
+      if (RESERVED_HANDLES.includes(handle.toLowerCase())) {
+        return err('invalid_handle: reserved name');
+      }
       const playerToken = `${randomUUID()}${randomUUID()}`;
       const created = await deps.persistence.createPlayer(handle, hashPlayerToken(playerToken));
       if (!created.ok) {

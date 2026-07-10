@@ -44,7 +44,7 @@ function indexForOutcome(names: readonly string[], outcome: 'p1' | 'draw' | 'p2'
 export function readMatchResult(odds: readonly OddsPayload[]): MatchResultProbabilities | null {
   const candidates = odds
     .filter((record) => record.SuperOddsType === MARKET_MATCH_RESULT && record.Pct !== undefined)
-    .sort((a, b) => b.Ts - a.Ts);
+    .sort((left, right) => right.Ts - left.Ts);
 
   for (const record of candidates) {
     const names = record.PriceNames;

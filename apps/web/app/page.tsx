@@ -72,7 +72,21 @@ export default async function LobbyPage() {
 
   const liveFixtures = fixturesResult.fixtures.filter((fixture) => fixture.phase === 'live');
   const upcomingFixtures = fixturesResult.fixtures.filter((fixture) => fixture.phase === 'pre');
-  const tapes = tapesResult.ok ? tapesResult.tapes : [];
+  // Tapes captured before the durable name cache shipped have no team names
+  // (the worker falls back to "Fixture N" with an empty participant2), and a
+  // pre-match fixture grows an odds-only tape before kickoff; the lobby
+  // shows only named, actually finished replays so the shelf reads like a
+  // programme.
+  const notFinishedIds = new Set(
+    fixturesResult.fixtures
+      .filter((fixture) => fixture.phase !== 'finished')
+      .map((fixture) => fixture.fixtureId),
+  );
+  const tapes = tapesResult.ok
+    ? tapesResult.tapes.filter(
+        (tape) => tape.participant2 !== '' && !notFinishedIds.has(tape.fixtureId),
+      )
+    : [];
 
   return (
     <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">

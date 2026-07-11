@@ -94,6 +94,8 @@ function ReconnectingBanner() {
 }
 
 function LoadingLayout() {
+  // Mirrors the final layout (sheet rule): the cockpit card (score, pulse,
+  // pitch, sponsor) on the left, the calls deck on the right.
   return (
     <div aria-busy className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between gap-3 py-3">
@@ -101,43 +103,59 @@ function LoadingLayout() {
         <Skeleton className="h-2.5 w-36" />
         <Skeleton className="h-6 w-16" />
       </div>
-      <Tray className="p-2">
-        <Card className="p-5">
-          <div className="flex items-center justify-center gap-3.5">
-            <Skeleton className="h-4.5 w-22" />
-            <Skeleton className="h-6.5 w-14" />
-            <Skeleton className="h-4.5 w-22" />
-          </div>
-          <div className="mt-2.5 flex justify-center">
-            <Skeleton className="h-3 w-24" />
-          </div>
-          <div className="rule-dashed mb-3 mt-4" />
-          <Skeleton className="h-2 w-full rounded-[6px]" />
-          <div className="mt-2.5 flex justify-center">
-            <Skeleton className="h-2.5 w-50" />
-          </div>
-        </Card>
-      </Tray>
-      <Tray className="p-2">
-        <div className="mx-2.5 mb-2 mt-1">
-          <Skeleton tone="deep" className="h-2 w-19" />
+      <div className="flex flex-wrap items-start gap-5">
+        <div className="min-w-0 flex-[1_1_430px]">
+          <Tray className="p-2">
+            <Card className="p-5">
+              <div className="flex items-center justify-center gap-3.5">
+                <Skeleton className="h-4.5 w-22" />
+                <Skeleton className="h-6.5 w-14" />
+                <Skeleton className="h-4.5 w-22" />
+              </div>
+              <div className="mt-2.5 flex justify-center">
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <div className="rule-dashed mb-3 mt-4" />
+              <Skeleton className="h-2 w-full rounded-[6px]" />
+              <div className="mt-2.5 flex justify-center">
+                <Skeleton className="h-2.5 w-50" />
+              </div>
+              <div className="rule-dashed mb-3 mt-4" />
+              <Skeleton tone="deep" className="aspect-[340/200] w-full rounded-[6px]" />
+              <div className="rule-dashed mt-3 pt-3">
+                <div className="flex justify-center">
+                  <Skeleton className="h-2.5 w-44" />
+                </div>
+              </div>
+            </Card>
+          </Tray>
         </div>
-        <Card>
-          {[0, 1, 2].map((row) => (
-            <div key={row} className={`flex justify-between gap-4 p-4 ${row === 0 ? '' : 'rule-dashed'}`}>
-              <div className="flex flex-1 flex-col gap-2">
-                <Skeleton className="h-2 w-13" />
-                <Skeleton className="h-3.5 w-45" />
-                <Skeleton className="h-2.5 w-27" />
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <Skeleton className="h-4.5 w-12" />
-                <Skeleton className="h-9.5 w-21 rounded-none" />
-              </div>
+        <div className="min-w-0 flex-[1_1_360px]">
+          <Tray className="p-2">
+            <div className="mx-2.5 mb-2 mt-1">
+              <Skeleton tone="deep" className="h-2 w-19" />
             </div>
-          ))}
-        </Card>
-      </Tray>
+            <Card>
+              {[0, 1, 2].map((row) => (
+                <div
+                  key={row}
+                  className={`flex justify-between gap-4 p-4 ${row === 0 ? '' : 'rule-dashed'}`}
+                >
+                  <div className="flex flex-1 flex-col gap-2">
+                    <Skeleton className="h-2 w-13" />
+                    <Skeleton className="h-3.5 w-45" />
+                    <Skeleton className="h-2.5 w-27" />
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <Skeleton className="h-4.5 w-12" />
+                    <Skeleton className="h-9.5 w-21 rounded-none" />
+                  </div>
+                </div>
+              ))}
+            </Card>
+          </Tray>
+        </div>
+      </div>
     </div>
   );
 }

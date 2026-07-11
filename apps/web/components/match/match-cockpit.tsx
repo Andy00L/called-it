@@ -55,7 +55,7 @@ export function MatchCockpit({
               onClick={onTogglePitch}
               aria-expanded={!pitchReduced}
               aria-label={pitchReduced ? 'Expand the pitch' : 'Reduce the pitch'}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-chip border border-hairline px-2.5 text-xs font-medium text-ink-muted transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97]"
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-chip border border-hairline px-2.5 text-xs font-medium text-ink-muted transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97]"
             >
               {pitchReduced ? 'Expand' : 'Reduce'}
               <svg

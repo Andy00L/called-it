@@ -144,24 +144,21 @@ function useBallMotion(ballX: number, reducedMotion: boolean): BallMotion {
 
 /**
  * Surface only fresh events (those arriving after mount), so opening a match
- * mid-game does not replay a stale burst or throw confetti on load.
+ * mid-game does not replay a stale burst or throw confetti on load. The ref
+ * captures the mount-time event id (or null when the match has none yet);
+ * anything with a different id afterwards is fresh, including the match's
+ * very first event.
  */
 function useFreshEvent(lastEvent: PitchEvent | null): PitchEvent | null {
   const [fresh, setFresh] = useState<PitchEvent | null>(null);
   const seenIdRef = useRef<number | null>(lastEvent?.id ?? null);
 
   useEffect(() => {
-    if (lastEvent === null) {
+    if (lastEvent === null || lastEvent.id === seenIdRef.current) {
       return;
     }
-    if (seenIdRef.current === null) {
-      seenIdRef.current = lastEvent.id;
-      return;
-    }
-    if (lastEvent.id !== seenIdRef.current) {
-      seenIdRef.current = lastEvent.id;
-      setFresh(lastEvent);
-    }
+    seenIdRef.current = lastEvent.id;
+    setFresh(lastEvent);
   }, [lastEvent]);
 
   return fresh;
@@ -194,10 +191,18 @@ function DetailedBall() {
   );
 }
 
-function GoalBurst({ team }: { team: PitchTeam | null }) {
+function GoalBurst({
+  team,
+  centerY,
+  sizeFactor,
+}: {
+  team: PitchTeam | null;
+  centerY: number;
+  sizeFactor: number;
+}) {
   const centerX = attackingX(team);
   return (
-    <g transform={`translate(${centerX} 100)`}>
+    <g transform={`translate(${centerX} ${centerY}) scale(${sizeFactor})`}>
       <circle r={11} fill="var(--accent)" className="goal-wave" />
       <circle r={12} fill="none" stroke="var(--accent)" strokeWidth={2.4} className="goal-ring-snap" />
       <circle r={6} fill="var(--accent)" className="goal-core" />
@@ -206,20 +211,47 @@ function GoalBurst({ team }: { team: PitchTeam | null }) {
   );
 }
 
-function EventBurst({ event }: { event: PitchEvent }) {
+/**
+ * One placed event bursting on the pitch. Positions derive from the render
+ * mode: the full pitch centers on y=100, the reduced band on y=32, and the
+ * corner flag pins to the band's own top edge.
+ */
+function EventBurst({
+  event,
+  centerY,
+  reduced,
+}: {
+  event: PitchEvent;
+  centerY: number;
+  reduced: boolean;
+}) {
   const centerX = attackingX(event.team);
   if (event.kind === 'goal') {
-    return <GoalBurst team={event.team} />;
+    return <GoalBurst team={event.team} centerY={centerY} sizeFactor={reduced ? 0.72 : 1} />;
   }
   if (event.kind === 'corner') {
     // A corner flag at the attacking side's top corner. Accent-deep keeps the
     // amber streak color reserved for streaks (design system coherence).
     const flagX = event.team === 'p2' ? FIELD_LEFT + 4 : FIELD_LEFT + FIELD_WIDTH - 4;
+    const flagTop = reduced ? 12 : 24;
+    const flagBottom = reduced ? 26 : 42;
+    const pennant = reduced ? { run: 6.5, rise: 2.2 } : { run: 9, rise: 3 };
     return (
       <g className="pitch-pop">
-        <line x1={flagX} y1={24} x2={flagX} y2={42} stroke="var(--accent-deep)" strokeWidth={1.6} />
+        <line
+          x1={flagX}
+          y1={flagTop}
+          x2={flagX}
+          y2={flagBottom}
+          stroke="var(--accent-deep)"
+          strokeWidth={1.6}
+        />
         <path
-          d={event.team === 'p2' ? `M${flagX} 24 l9 3 l-9 3 z` : `M${flagX} 24 l-9 3 l9 3 z`}
+          d={
+            event.team === 'p2'
+              ? `M${flagX} ${flagTop} l${pennant.run} ${pennant.rise} l-${pennant.run} ${pennant.rise} z`
+              : `M${flagX} ${flagTop} l-${pennant.run} ${pennant.rise} l${pennant.run} ${pennant.rise} z`
+          }
           fill="var(--accent-deep)"
         />
         <title>Corner</title>
@@ -230,12 +262,12 @@ function EventBurst({ event }: { event: PitchEvent }) {
     <g className="pitch-pop">
       <rect
         x={centerX - 3.5}
-        y={95}
+        y={centerY - 5}
         width={7}
         height={10}
         rx={1.2}
         fill="var(--ink-muted)"
-        transform={`rotate(8 ${centerX} 100)`}
+        transform={`rotate(8 ${centerX} ${centerY})`}
       />
       <title>Card</title>
     </g>
@@ -413,10 +445,15 @@ export function PitchView({
       }`}
     >
       <svg
+        // Remount on mode switch: the persistent group would otherwise
+        // transition translate() across the viewBox swap, sliding the ball
+        // vertically (a fake vertical signal). Instant swap + a small
+        // fade-rise instead; ball motion state lives above and survives.
+        key={reduced ? 'band' : 'full'}
         viewBox={reduced ? '0 0 340 64' : '0 0 340 200'}
         role="img"
         aria-label={`Pressure pitch, live from the feed. ${displayCaption}.`}
-        className="w-full"
+        className="w-full [animation:chip-in_var(--duration-small)_var(--ease-enter)_both]"
       >
         <defs>
           <radialGradient id="pitchTopLight" cx="35%" cy="30%" r="72%">
@@ -478,7 +515,7 @@ export function PitchView({
 
         {/* Event burst, keyed by the event id so it plays exactly once. */}
         {freshEvent !== null && phase !== 'pre' ? (
-          <EventBurst key={freshEvent.id} event={freshEvent} />
+          <EventBurst key={freshEvent.id} event={freshEvent} centerY={centerY} reduced={reduced} />
         ) : null}
 
         {/* Momentum: the hot-zone halo, trail, contact shadow, and the rolling

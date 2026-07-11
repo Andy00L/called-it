@@ -59,6 +59,14 @@ const SWEEP_INTERVAL_MS = 60 * 1000;
 // Tapes smaller than this are connection stubs, not replayable matches.
 const MIN_TAPE_BYTES = 2048;
 
+// A fixture state can outlive its match: a worker restart wipes the live
+// store, then a few post-match odds ticks resurrect an odds-only state stuck
+// at phase 'pre', which reads as "unfinished" forever and would hide the
+// finished match's tape (seen in prod: Spain-Belgium, fixture 18218149). So
+// "still recording" requires BOTH an unfinished state AND a tape file that
+// was appended recently; a quiet tape is replayable regardless of the state.
+const TAPE_QUIET_MS = 10 * 60 * 1000;
+
 // Tape file naming, mirrored from tape.ts (fixture-<id>.ndjson).
 const TAPE_FILE_PATTERN = /^fixture-(\d+)\.ndjson$/;
 
@@ -336,8 +344,11 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
         if (sizeBytes < MIN_TAPE_BYTES) {
           continue;
         }
-        // A tape still being written belongs to a live match: not replayable yet.
-        if (deps.isFixtureLive(fixtureId)) {
+        // A tape still being written belongs to a live match: not replayable
+        // yet. Quiet tapes list even when the state reads unfinished (see
+        // TAPE_QUIET_MS: stale resurrected states must not hide finished
+        // matches).
+        if (deps.isFixtureLive(fixtureId) && nowMs() - updatedAtMs < TAPE_QUIET_MS) {
           continue;
         }
         const fixture = fixturesById.get(fixtureId);
@@ -367,7 +378,15 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
       if (sessions.size >= MAX_ACTIVE_SESSIONS) {
         return err('replay_capacity');
       }
-      if (deps.isFixtureLive(fixtureId)) {
+      // Same recording test as listTapes: an unfinished state alone must not
+      // block replaying a tape that went quiet (stale resurrected states).
+      let tapeMtimeMs = 0;
+      try {
+        tapeMtimeMs = statSync(tapeFilePath(deps.deck, fixtureId)).mtimeMs;
+      } catch {
+        return err('no_tape');
+      }
+      if (deps.isFixtureLive(fixtureId) && nowMs() - tapeMtimeMs < TAPE_QUIET_MS) {
         return err('fixture_still_live');
       }
       const tape = readTape(tapeFilePath(deps.deck, fixtureId));

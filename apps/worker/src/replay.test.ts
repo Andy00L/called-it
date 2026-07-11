@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -10,7 +10,7 @@ import {
   type EventWindowPredicate,
 } from '@calledit/engine';
 import type { LivePayload, SettlementNotice } from '@calledit/contracts';
-import { appendTapeEntry, openTapeDeck, type TapeDeck } from './tape.js';
+import { appendTapeEntry, openTapeDeck, tapeFilePath, type TapeDeck } from './tape.js';
 import { createReplayManager, type ReplayManager, type ReplayScheduler } from './replay.js';
 
 /**
@@ -305,6 +305,34 @@ test('a session cannot be created while the fixture is still live', async () => 
     if (!created.ok) {
       assert.equal(created.error, 'fixture_still_live');
     }
+  } finally {
+    harness.manager.stopAll();
+  }
+});
+
+test('a quiet tape lists and replays even when a stale state reads unfinished', async () => {
+  // Prod scenario (Spain-Belgium, fixture 18218149): a restart wipes the live
+  // store mid-day, post-match odds resurrect an odds-only state stuck at
+  // 'pre', and isFixtureLive stays true forever. The finished match's tape
+  // must still list and replay once the file has gone quiet.
+  const deck = writeRealTape('deck-stale-state');
+  const elevenMinutesAgoMs = Date.now() - 11 * 60 * 1000;
+  utimesSync(
+    tapeFilePath(deck, realFixtureId),
+    elevenMinutesAgoMs / 1000,
+    elevenMinutesAgoMs / 1000,
+  );
+
+  const harness = createHarness(deck, { liveFixtureIds: [realFixtureId] });
+  try {
+    const listed = harness.manager.listTapes();
+    assert.ok(listed.ok);
+    assert.deepEqual(
+      listed.value.map((tape) => tape.fixtureId),
+      [realFixtureId],
+    );
+    const created = await harness.manager.createSession(realFixtureId, 10);
+    assert.ok(created.ok);
   } finally {
     harness.manager.stopAll();
   }

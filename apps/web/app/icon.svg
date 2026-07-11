@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Favicon: the pressure pitch's printed matchday ball (the product's hero
+       object, geometry scaled from components/match/pitch-view.tsx) on the
+       accent green field. Tokens: accent #2C8C3C, ink #12170F, card #FFFFFF
+       (sourceRef: docs/UI_DESIGN_SYSTEM.md). -->
+  <rect width="32" height="32" rx="7" fill="#2C8C3C"/>
+  <g transform="translate(16 16)">
+    <circle r="10" fill="#FFFFFF"/>
+    <polygon points="0,-2.91 2.76,-0.9 1.71,2.35 -1.71,2.35 -2.76,-0.9" fill="#12170F"/>
+    <path d="M0,-2.91 L0,-9.45 M2.76,-0.9 L9,-2.93 M1.71,2.35 L5.55,7.64 M-1.71,2.35 L-5.55,7.64 M-2.76,-0.9 L-9,-2.93" stroke="#12170F" stroke-width="0.9" fill="none" stroke-linecap="round"/>
+    <path d="M-1.91,-8.82 L0,-9.64 L1.91,-8.82 M7.91,-4.55 L9.05,-2.91 L8.18,-1" stroke="#12170F" stroke-width="0.72" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle r="10" fill="none" stroke="#12170F" stroke-width="0.95"/>
+  </g>
+</svg>

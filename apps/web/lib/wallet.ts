@@ -1,24 +1,19 @@
 import type { GuestSession, WalletChallengePayload } from '@calledit/contracts';
 import { workerUrl } from './api';
+import { connectAndSignMessage } from './solana-wallets';
 
 /**
- * Optional Solana wallet link, client side. The player signs a fresh
- * server-issued challenge with their wallet (Phantom) to claim their profile or
- * restore it on a new device. No transaction is ever signed; this only proves
- * wallet ownership. The wallet is never required to play.
+ * Optional Solana wallet link, client side. The player picks a discovered
+ * wallet (Wallet Standard, with legacy Phantom as fallback) and signs a fresh
+ * server-issued challenge with it to claim their profile or restore it on a
+ * new device. No transaction is ever signed; this only proves wallet
+ * ownership. The wallet is never required to play.
  */
-
-// Minimal shape of the injected Phantom provider (window.solana). Typed so no
-// `any` leaks in; only the two calls this feature needs are declared.
-interface PhantomProvider {
-  isPhantom?: boolean;
-  connect(options?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string } }>;
-  signMessage(message: Uint8Array, display?: string): Promise<{ signature: Uint8Array }>;
-}
 
 export type WalletFailure =
   | 'no_wallet'
   | 'rejected'
+  | 'unsupported'
   | 'wallet_taken'
   | 'wallet_unlinked'
   | 'challenge_expired'
@@ -26,23 +21,6 @@ export type WalletFailure =
   | 'invalid_wallet'
   | 'network'
   | 'server';
-
-function getProvider(): PhantomProvider | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  const provider = (window as Window & { solana?: PhantomProvider }).solana;
-  return provider !== undefined && provider.isPhantom === true ? provider : null;
-}
-
-/** Base64 without Buffer (browser): the signature is 64 bytes. */
-function toBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return window.btoa(binary);
-}
 
 const KNOWN_WALLET_ERRORS: readonly WalletFailure[] = [
   'wallet_taken',
@@ -75,50 +53,42 @@ async function fetchChallenge(): Promise<WalletChallengePayload | null> {
 }
 
 /**
- * Connect the wallet and sign a fresh challenge. Returns the base58 pubkey plus
- * the signed nonce, or a distinct failure (no wallet, user rejected, feed down).
+ * Sign a fresh challenge with the chosen wallet. Returns the base58 pubkey
+ * plus the signed nonce, or a distinct failure (no wallet, user rejected,
+ * wallet cannot sign plain bytes, feed down).
  */
-async function proveOwnership(): Promise<
-  { ok: true; walletPubkey: string; nonce: string; signature: string } | { ok: false; reason: WalletFailure }
+async function proveOwnership(
+  walletId: string,
+): Promise<
+  | { ok: true; walletPubkey: string; nonce: string; signature: string }
+  | { ok: false; reason: WalletFailure }
 > {
-  const provider = getProvider();
-  if (provider === null) {
-    return { ok: false, reason: 'no_wallet' };
-  }
-  let walletPubkey: string;
-  try {
-    const connected = await provider.connect();
-    walletPubkey = connected.publicKey.toString();
-  } catch {
-    return { ok: false, reason: 'rejected' };
-  }
   const challenge = await fetchChallenge();
   if (challenge === null) {
     return { ok: false, reason: 'network' };
   }
-  try {
-    const signed = await provider.signMessage(
-      new TextEncoder().encode(challenge.message),
-      'utf8',
-    );
-    return {
-      ok: true,
-      walletPubkey,
-      nonce: challenge.nonce,
-      signature: toBase64(signed.signature),
-    };
-  } catch {
-    return { ok: false, reason: 'rejected' };
+  const signed = await connectAndSignMessage(walletId, challenge.message);
+  if (!signed.ok) {
+    return signed;
   }
+  return {
+    ok: true,
+    walletPubkey: signed.walletPubkey,
+    nonce: challenge.nonce,
+    signature: signed.signatureBase64,
+  };
 }
 
 export type WalletLinkOutcome =
   | { ok: true; walletPubkey: string }
   | { ok: false; reason: WalletFailure };
 
-/** Link the connected wallet to the authenticated guest (claim the profile). */
-export async function linkWalletToProfile(session: GuestSession): Promise<WalletLinkOutcome> {
-  const proof = await proveOwnership();
+/** Link the chosen wallet to the authenticated guest (claim the profile). */
+export async function linkWalletToProfile(
+  session: GuestSession,
+  walletId: string,
+): Promise<WalletLinkOutcome> {
+  const proof = await proveOwnership(walletId);
   if (!proof.ok) {
     return proof;
   }
@@ -155,9 +125,9 @@ export type WalletRestoreOutcome =
   | { ok: true; session: GuestSession }
   | { ok: false; reason: WalletFailure };
 
-/** Restore the guest that owns the connected wallet, returning a fresh session. */
-export async function restoreProfileFromWallet(): Promise<WalletRestoreOutcome> {
-  const proof = await proveOwnership();
+/** Restore the guest that owns the chosen wallet, returning a fresh session. */
+export async function restoreProfileFromWallet(walletId: string): Promise<WalletRestoreOutcome> {
+  const proof = await proveOwnership(walletId);
   if (!proof.ok) {
     return proof;
   }
@@ -199,8 +169,9 @@ export function shortWallet(walletPubkey: string): string {
 
 /** Player-facing copy per wallet failure (distinct, actionable). */
 export const WALLET_FAILURE_COPY: Record<WalletFailure, string> = {
-  no_wallet: 'No Solana wallet found. Install Phantom, then try again.',
-  rejected: 'Wallet request cancelled.',
+  no_wallet: 'No Solana wallet found in this browser. Install Phantom, then reload.',
+  rejected: 'Request cancelled in the wallet.',
+  unsupported: 'That wallet cannot sign plain messages. Try Phantom or Solflare.',
   wallet_taken: 'That wallet already claims another profile.',
   wallet_unlinked: 'No profile is linked to that wallet yet.',
   challenge_expired: 'The request timed out. Try again.',

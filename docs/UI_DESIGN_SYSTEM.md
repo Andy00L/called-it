@@ -140,13 +140,22 @@ with the receipt). No glass, no grain, no gradients as decoration.
 - `prefers-reduced-motion`: everything collapses to opacity or none with an
   identical final layout.
 
-## Signature elements (two, with placement rules)
+## Signature elements (three, with placement rules)
 
 1. **The probability pulse.** The 1X2 market as one horizontal segmented bar
    (accent = the side the market favors, soft-dark and muted for the rest)
    with mono percentages. Placement: exactly once at the top of the match
    screen; a thin 2 px echo on lobby cards of live matches.
-2. **The receipt.** Thermal-ticket surface (paper, mono, dashed rules,
+2. **The pressure pitch.** A printed top-down pitch (accent-soft field,
+   hairline markings) that reacts to the live feed with no video: an accent
+   pressure halo and a printed matchday ball (ink panels, seam, rim) that
+   rolls, trails, and motion-blurs along one horizontal line as momentum
+   shifts, with a pre-event shimmer and a goal detonation. It is an honest
+   momentum abstraction, never player tracking, and the caption says "live, no
+   video". Placement: once inside the match cockpit card, full by default with
+   a reduce toggle to a slim band. Amber stays reserved (corner flags use
+   accent-deep).
+3. **The receipt.** Thermal-ticket surface (paper, mono, dashed rules,
    perforated edges, slight rotation, floating shadow). Placement: settlement
    moments and the public share page only. Never a generic card.
 

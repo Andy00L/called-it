@@ -268,8 +268,9 @@ body {
   }
 }
 
-/* Pressure pitch: an event bursting on the pitch (keyed by event id so it
-   plays once), the pre-event anticipation shimmer, and the hot-zone breathe. */
+/* Pressure pitch: the hero ball rolls, so the pitch carries its own motion set.
+   An event bursts once (keyed by event id), the pre-event shimmer anticipates
+   it, the hot zone breathes, a goal detonates, and a goal throws confetti. */
 @keyframes pitch-pop {
   0% {
     opacity: 0;
@@ -295,31 +296,131 @@ body {
   transform-origin: center;
   animation: pitch-pop 1400ms var(--ease-enter) both;
 }
+/* The pre-event shimmer scales as well as fades, so it reads as a pulse. */
 @keyframes pitch-shimmer {
   0%,
   100% {
-    opacity: 0.2;
+    opacity: 0.3;
+    transform: scale(0.96);
   }
   50% {
-    opacity: 0.75;
+    opacity: 0.85;
+    transform: scale(1.06);
   }
 }
 .pitch-shimmer {
-  animation: pitch-shimmer 1100ms var(--ease-standard) infinite;
-}
-@keyframes pitch-heat {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.08);
-  }
-}
-.pitch-heat {
   transform-box: fill-box;
   transform-origin: center;
-  animation: pitch-heat 1600ms var(--ease-standard) infinite;
+  animation: pitch-shimmer 1100ms var(--ease-standard) infinite;
+}
+/* The hot-zone halo breathes by opacity (never layout) at high danger. */
+@keyframes halo-breath {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.74;
+  }
+}
+.halo-breath {
+  animation: halo-breath 1600ms var(--ease-standard) infinite;
+}
+/* A goal detonation on the pitch: an outward wave, a snapping ring, a core. */
+@keyframes goal-wave {
+  0% {
+    opacity: 0.5;
+    transform: scale(0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+@keyframes goal-ring-snap {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.5);
+  }
+  55% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+@keyframes goal-core {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+.goal-wave,
+.goal-ring-snap,
+.goal-core {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.goal-wave {
+  animation: goal-wave 700ms var(--ease-enter) both;
+}
+.goal-ring-snap {
+  animation: goal-ring-snap 520ms var(--ease-enter) both;
+}
+.goal-core {
+  animation: goal-core 1150ms var(--ease-enter) both;
+}
+/* Confetti + the "Goal" stamp: the one loud celebration, a goal only. */
+@keyframes confetti-fly {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  8% {
+    opacity: 1;
+  }
+  30% {
+    transform: translate(calc(var(--tx) * 0.45), var(--peak))
+      rotate(calc(var(--rot) * 0.4));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot));
+  }
+}
+@keyframes goal-stamp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.82) rotate(-3deg);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06) rotate(-3deg);
+  }
+  26% {
+    transform: translate(-50%, -50%) scale(1) rotate(-3deg);
+  }
+  74% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(-3deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.03) rotate(-3deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -18,8 +18,7 @@ import { EmptyState } from '../ui/empty-state';
 import { Eyebrow } from '../ui/eyebrow';
 import { Card, Tray } from '../ui/surface';
 import { buttonClassName } from '../ui/button-styles';
-import { ScoreCard } from './score-card';
-import { PitchView } from './pitch-view';
+import { MatchCockpit } from './match-cockpit';
 import { CallCard } from './call-card';
 import { LatencyHud } from './latency-hud';
 import { EventFeed } from './event-feed';
@@ -173,6 +172,8 @@ export function MatchScreen({
   const [justLockedCategory, setJustLockedCategory] = useState<CallCategory | null>(null);
   const [speed, setSpeed] = useState(mode.kind === 'replay' ? mode.initialSpeed : 1);
   const [replayNotice, setReplayNotice] = useState<string | null>(null);
+  // The pitch is big by default; the viewer can reduce it to reach the calls.
+  const [pitchReduced, setPitchReduced] = useState(false);
 
   // The stored identity marks "you" on the board without forcing a lock.
   useEffect(() => {
@@ -259,6 +260,8 @@ export function MatchScreen({
       setReplayNotice(REPLAY_FAILURE_COPY[updated.reason]);
     }
   };
+
+  const togglePitch = (): void => setPitchReduced((previous) => !previous);
 
   if (payload === null && connection !== 'lost') {
     return <LoadingLayout />;
@@ -445,36 +448,22 @@ export function MatchScreen({
         </div>
       ) : null}
 
-      <ScoreCard
-        payload={payload}
-        participant1={participant1}
-        participant2={participant2}
-        startTimeMs={startTimeMs}
-        displayClockSeconds={displayClockSeconds}
-      />
-
-      {payload.phase !== 'pre' || payload.matchResult !== null ? (
-        <div className="mt-5">
-          <Tray className="p-2">
-            <div className="mx-2.5 mb-2 mt-1.5 flex">
-              <Eyebrow>Live pitch</Eyebrow>
-            </div>
-            <Card className="px-4 py-3.5">
-              <PitchView
-                momentum={payload.momentum}
-                matchResult={payload.matchResult}
-                participant1={participant1}
-                participant2={participant2}
-                phase={payload.phase}
-                connectionLost={connection === 'lost'}
-              />
-            </Card>
-          </Tray>
+      <div className="flex flex-wrap items-start gap-5">
+        <div className="min-w-0 flex-[1_1_430px]">
+          <MatchCockpit
+            payload={payload}
+            participant1={participant1}
+            participant2={participant2}
+            startTimeMs={startTimeMs}
+            displayClockSeconds={displayClockSeconds}
+            connectionLost={connection === 'lost'}
+            pitchReduced={pitchReduced}
+            onTogglePitch={togglePitch}
+            sponsor={SAMPLE_SPONSOR}
+          />
         </div>
-      ) : null}
 
-      <div className="mt-5 flex flex-wrap items-start gap-5">
-        <div className="flex min-w-0 flex-[2_1_560px] flex-col gap-5">
+        <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-5">
           {callsSection}
 
           {payload.phase === 'live' && pendingMine.length > 0 ? (
@@ -496,29 +485,33 @@ export function MatchScreen({
             </section>
           ) : null}
         </div>
+      </div>
 
-        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
+      <div className="mt-5 flex flex-wrap items-start gap-5">
+        <div className="min-w-0 flex-[1_1_280px]">
           <BookieCard lastMirroredProbability={lastBookieProbability} />
+        </div>
 
-          {mode.kind === 'live' ? (
+        {mode.kind === 'live' ? (
+          <div className="min-w-0 flex-[1_1_300px]">
             <MatchBoard
               fixtureId={mode.fixtureId}
               youPlayerId={session?.playerId ?? null}
               settlementCount={settlements.length}
             />
-          ) : null}
+          </div>
+        ) : null}
 
-          <section aria-label="Event feed">
-            <Eyebrow>Event feed</Eyebrow>
-            <div className="mt-2.5">
-              <EventFeed
-                events={payload.recentEvents}
-                participant1={participant1}
-                participant2={participant2}
-              />
-            </div>
-          </section>
-        </div>
+        <section aria-label="Event feed" className="min-w-0 flex-[1_1_300px]">
+          <Eyebrow>Event feed</Eyebrow>
+          <div className="mt-2.5">
+            <EventFeed
+              events={payload.recentEvents}
+              participant1={participant1}
+              participant2={participant2}
+            />
+          </div>
+        </section>
       </div>
 
       <SettlementLayer

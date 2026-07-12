@@ -55,8 +55,8 @@ interface SolanaSignAndSendTransactionFeature {
   ): Promise<readonly { signature: Uint8Array }[]>;
 }
 
-// The product runs mainnet only (docs/TECH_DOC.md, Solana integrations).
-const MAINNET_CHAIN = 'solana:mainnet';
+/** Wallet Standard chain ids the app targets; the worker's quote decides. */
+export type SolanaChain = 'solana:mainnet' | 'solana:devnet';
 
 interface StandardWallet {
   name: string;
@@ -335,12 +335,15 @@ export type WalletPayOutcome =
 /**
  * Connect the chosen wallet, let the caller build the unsigned transaction
  * for the connected address (the worker does the building), then have the
- * wallet sign AND submit it. Returns the base58 transaction signature the
- * worker verifies on-chain. The legacy injection cannot take serialized
- * bytes, so payments require a Wallet Standard wallet.
+ * wallet sign AND submit it on the requested chain (the quote's network, so
+ * a devnet worker gives a devnet flow with no code change). Returns the
+ * base58 transaction signature the worker verifies on-chain. The legacy
+ * injection cannot take serialized bytes, so payments require a Wallet
+ * Standard wallet.
  */
 export async function connectAndSendTransaction(
   walletId: string,
+  chain: SolanaChain,
   buildTransactionBase64: (payerPubkey: string) => Promise<string | null>,
 ): Promise<WalletPayOutcome> {
   if (walletId === LEGACY_PHANTOM_ID) {
@@ -365,8 +368,10 @@ export async function connectAndSendTransaction(
     return { ok: false, reason: 'rejected' };
   }
   const account =
-    accounts.find((candidate) => candidate.chains.includes(MAINNET_CHAIN)) ??
-    accounts.find((candidate) => candidate.chains.some((chain) => chain.startsWith('solana:'))) ??
+    accounts.find((candidate) => candidate.chains.includes(chain)) ??
+    accounts.find((candidate) =>
+      candidate.chains.some((candidateChain) => candidateChain.startsWith('solana:')),
+    ) ??
     accounts[0];
   if (account === undefined || typeof account.address !== 'string') {
     return { ok: false, reason: 'rejected' };
@@ -379,7 +384,7 @@ export async function connectAndSendTransaction(
     const [sent] = await payFeature.signAndSendTransaction({
       account,
       transaction: base64ToBytes(transactionBase64),
-      chain: MAINNET_CHAIN,
+      chain,
     });
     if (sent === undefined) {
       return { ok: false, reason: 'unsupported' };

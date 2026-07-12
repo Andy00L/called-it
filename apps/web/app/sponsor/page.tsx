@@ -41,7 +41,7 @@ export default async function SponsorPage() {
       <SponsorForm />
 
       <div className="mt-8">
-        <SponsorTicker sponsors={board} />
+        <SponsorTicker sponsors={board} sellEmptySpace />
       </div>
 
       {board.length > 0 ? (

@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import { fetchFixtures } from '../../../lib/api';
 import { resolveSponsorName } from '../../../lib/sponsor';
+import { fetchSponsorBoard } from '../../../lib/sponsor-api';
 import { MatchScreen } from '../../../components/match/match-screen';
+import { SponsorTicker } from '../../../components/lobby/sponsor-ticker';
 
 export default async function MatchPage({
   params,
@@ -18,13 +20,17 @@ export default async function MatchPage({
   }
 
   // Names come from the lobby listing; the live channel carries ids only.
-  const listing = await fetchFixtures();
+  const [listing, sponsorBoard] = await Promise.all([fetchFixtures(), fetchSponsorBoard()]);
   const fixture = listing.ok
     ? listing.fixtures.find((candidate) => candidate.fixtureId === fixtureId)
     : undefined;
 
   return (
     <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+      {/* Header board: renders only when someone has paid (product rule). */}
+      <div className="pt-3">
+        <SponsorTicker sponsors={sponsorBoard} />
+      </div>
       <MatchScreen
         mode={{ kind: 'live', fixtureId }}
         participant1={fixture?.participant1 ?? 'Home side'}

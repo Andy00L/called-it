@@ -66,7 +66,18 @@ function TickerRun({ items, hidden }: { items: TickerItem[]; hidden: boolean }) 
   );
 }
 
-export function SponsorTicker({ sponsors }: { sponsors: SponsorBoardEntry[] }) {
+export function SponsorTicker({
+  sponsors,
+  sellEmptySpace = false,
+}: {
+  sponsors: SponsorBoardEntry[];
+  /** Only the /sponsor page previews an unsold board; everywhere else the
+   *  band renders solely when someone has paid (product rule). */
+  sellEmptySpace?: boolean;
+}) {
+  if (sponsors.length === 0 && !sellEmptySpace) {
+    return null;
+  }
   const items = buildLoopItems(sponsors);
   const loopSeconds = Math.min(
     MAX_LOOP_SECONDS,
@@ -75,7 +86,7 @@ export function SponsorTicker({ sponsors }: { sponsors: SponsorBoardEntry[] }) {
   return (
     <section
       aria-label="Sponsor board"
-      className="mt-11 overflow-hidden rounded-card bg-ink py-2.5 [box-shadow:var(--shadow-btn-secondary)]"
+      className="overflow-hidden rounded-card bg-ink py-2.5 [box-shadow:var(--shadow-btn-secondary)]"
     >
       <div
         className="flex w-max [animation:ticker-scroll_linear_infinite]"

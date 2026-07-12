@@ -175,6 +175,8 @@ export interface SponsorQuote {
   /** Base58 address the payment must reach (the game's server wallet). */
   recipient: string;
   expiresAtMs: number;
+  /** Chain the payment settles on; follows the worker's configuration. */
+  network: 'mainnet' | 'devnet';
 }
 
 /** POST /sponsors/:id/transaction response: unsigned transfer to sign. */

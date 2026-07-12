@@ -188,7 +188,10 @@ mechanisms ride the same rails:
   single-use) before the name rides the board. Pricing is a public formula
   (0.01 SOL per day, times the tier, times a demand multiplier that grows
   with each active sponsor). The whole ad-sales funnel is one wallet
-  signature: no sales team, no invoice, no account.
+  signature: no sales team, no invoice, no account. The flow follows the
+  worker's configured network end to end (mainnet in production; a devnet
+  worker sells the same slots in devnet SOL, and the quote tells the wallet
+  which chain to sign on).
 
 ### Why free-to-play is the moat, not the compromise
 

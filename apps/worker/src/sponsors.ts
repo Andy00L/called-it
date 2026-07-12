@@ -54,6 +54,8 @@ export interface SponsorServiceDeps {
   persistence: PersistencePort;
   /** Null when the worker runs without a wallet: sponsorship is off. */
   payments: SponsorPaymentPort | null;
+  /** Chain payments settle on; quotes carry it so wallets target it. */
+  network: 'mainnet' | 'devnet';
   nowMs?: () => number;
 }
 
@@ -209,6 +211,7 @@ export function createSponsorService(deps: SponsorServiceDeps): SponsorService {
         amountLamports: record.quoteLamports,
         recipient: deps.payments.recipient,
         expiresAtMs: record.createdAtMs + QUOTE_TTL_MS,
+        network: deps.network,
       });
     },
 

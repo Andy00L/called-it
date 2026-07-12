@@ -533,7 +533,11 @@ async function main(): Promise<void> {
   if (sponsorPayments === null) {
     console.warn('[main] no wallet configured: self-serve sponsorship is OFF');
   }
-  const sponsorService = createSponsorService({ persistence, payments: sponsorPayments });
+  const sponsorService = createSponsorService({
+    persistence,
+    payments: sponsorPayments,
+    network: env.cfg.network,
+  });
 
   // Time Machine: replays run on private stores and in-memory persistence;
   // fanout callbacks resolve at call time, after fanout exists below.

@@ -37,7 +37,12 @@ function createHarness(startMs = 1_000_000) {
   let currentMs = startMs;
   const persistence = createMemoryPersistence();
   const payments = createFakePayments();
-  const service = createSponsorService({ persistence, payments, nowMs: () => currentMs });
+  const service = createSponsorService({
+    persistence,
+    payments,
+    network: 'devnet',
+    nowMs: () => currentMs,
+  });
   return {
     persistence,
     payments,
@@ -72,6 +77,8 @@ test('a quote validates every rendered field', async () => {
   assert.ok(quoted.ok);
   assert.equal(quoted.value.amountLamports, BASE_LAMPORTS_PER_DAY * 14);
   assert.equal(quoted.value.recipient, harness.payments.recipient);
+  // The quote tells the wallet which chain to settle on (devnet option).
+  assert.equal(quoted.value.network, 'devnet');
 });
 
 test('a verified payment activates the sponsorship on the board', async () => {

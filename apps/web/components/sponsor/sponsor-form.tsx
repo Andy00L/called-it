@@ -115,10 +115,15 @@ export function SponsorForm() {
     }
     const intentId = quote.intentId;
     setPhase({ kind: 'paying', walletName: wallet.name });
-    const sent = await connectAndSendTransaction(wallet.id, async (payerPubkey) => {
-      const built = await fetchSponsorTransaction(intentId, payerPubkey);
-      return built.ok ? built.value.transactionBase64 : null;
-    });
+    // The quote decides the chain: a devnet worker sells devnet slots.
+    const sent = await connectAndSendTransaction(
+      wallet.id,
+      `solana:${quote.network}`,
+      async (payerPubkey) => {
+        const built = await fetchSponsorTransaction(intentId, payerPubkey);
+        return built.ok ? built.value.transactionBase64 : null;
+      },
+    );
     if (!sent.ok) {
       setPhase({ kind: 'error', message: WALLET_PAY_COPY[sent.reason] });
       return;
@@ -316,8 +321,9 @@ export function SponsorForm() {
               }}
             />
             <p className="text-xs text-ink-muted">
-              The wallet signs one transfer to the game wallet with this quote's reference in
-              the memo. The slot activates once the chain confirms.
+              The wallet signs one transfer on Solana{' '}
+              <span className="font-mono">{quote.network}</span> to the game wallet, with this
+              quote's reference in the memo. The slot activates once the chain confirms.
             </p>
           </div>
         )}

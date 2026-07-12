@@ -116,6 +116,10 @@ export default async function LobbyPage() {
   return (
     <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
       <NavCard />
+      {/* Header board: renders only when someone has paid (product rule). */}
+      <div className="mt-4">
+        <SponsorTicker sponsors={sponsorBoard} />
+      </div>
       <HeroHeader />
       {/* Pulls into the hero's bottom margin so the line reads as its coda. */}
       <DuelLine stats={duelStats} className="-mt-9 mb-14" />
@@ -196,10 +200,12 @@ export default async function LobbyPage() {
         ) : null}
       </div>
 
-      <SponsorTicker sponsors={sponsorBoard} />
-
-      <p className="mt-5 text-center text-xs text-ink-muted">
-        runs on TxLINE data, anchored on Solana
+      <p className="mt-11 text-center text-xs text-ink-muted">
+        runs on TxLINE data, anchored on Solana{' '}
+        <span aria-hidden>&middot;</span>{' '}
+        <Link href="/sponsor" className="underline decoration-hairline underline-offset-2">
+          sponsor the board
+        </Link>
       </p>
     </main>
   );

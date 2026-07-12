@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { fetchReplayTapes } from '../../../lib/api';
 import { fetchReplaySession } from '../../../lib/replay-api';
 import { resolveSponsorName } from '../../../lib/sponsor';
+import { fetchSponsorBoard } from '../../../lib/sponsor-api';
 import { MatchScreen } from '../../../components/match/match-screen';
+import { SponsorTicker } from '../../../components/lobby/sponsor-ticker';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Tray } from '../../../components/ui/surface';
 import { buttonClassName } from '../../../components/ui/button-styles';
@@ -45,13 +47,17 @@ export default async function ReplayPage({
     );
   }
 
-  const tapes = await fetchReplayTapes();
+  const [tapes, sponsorBoard] = await Promise.all([fetchReplayTapes(), fetchSponsorBoard()]);
   const tape = tapes.ok
     ? tapes.tapes.find((candidate) => candidate.fixtureId === sessionResult.session.fixtureId)
     : undefined;
 
   return (
     <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+      {/* Header board: renders only when someone has paid (product rule). */}
+      <div className="pt-3">
+        <SponsorTicker sponsors={sponsorBoard} />
+      </div>
       <MatchScreen
         mode={{
           kind: 'replay',

@@ -8,6 +8,7 @@ import { Tray } from '../../../components/ui/surface';
 import { buttonClassName } from '../../../components/ui/button-styles';
 import { ReceiptTicket } from '../../../components/receipt/receipt-ticket';
 import { ReceiptActions } from '../../../components/receipt/receipt-actions';
+import { SAMPLE_SPONSOR } from '../../../lib/sponsor';
 
 function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
   return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;
@@ -108,6 +109,15 @@ export default async function ReceiptPage({
         <ReceiptActions explorerUrl={explorerUrl} />
         <p className="mt-4.5 text-center text-xs text-ink-muted">
           Solana {receipt.network}. The proof recomputes on every load.
+        </p>
+        {/* The third ad surface (docs/TECH_DOC.md): the sponsor travels with
+            every shared receipt. Same board style as the match cockpit. */}
+        <p className="mt-5 flex items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+          Match presented by
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-1 rounded-full bg-accent" />
+            <span className="text-[11px] font-semibold text-ink">{SAMPLE_SPONSOR}</span>
+          </span>
         </p>
       </div>
     </main>

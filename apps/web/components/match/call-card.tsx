@@ -90,12 +90,21 @@ export function CallCard({
         </div>
 
         <div className="flex flex-none flex-col items-end justify-between gap-2.5">
+          {/* "pts" spelled out: a bare "+150" reads as an American odds line
+              to a betting-literate fan; the unit keeps it free-to-play. */}
           <span
             className={`tabular font-mono text-xl font-semibold ${
               isClosing ? 'text-ink-faint' : 'text-accent'
             }`}
           >
             +{formatPoints(option.potentialPoints)}
+            <span
+              className={`ml-1 text-[11px] font-medium ${
+                isClosing ? 'text-ink-faint' : 'text-ink-muted'
+              }`}
+            >
+              pts
+            </span>
           </span>
           {isOffered ? (
             <Button

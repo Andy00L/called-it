@@ -6,6 +6,7 @@ import { Card, Tray } from '../components/ui/surface';
 import { buttonClassName } from '../components/ui/button-styles';
 import { LiveFixtureRow, UpcomingFixtureRow } from '../components/lobby/fixture-card';
 import { ReplayTapeRow } from '../components/lobby/replay-row';
+import { HowItWorks } from '../components/onboarding/how-it-works';
 
 function NavCard() {
   const navLinkClasses =
@@ -107,6 +108,8 @@ export default async function LobbyPage() {
     <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
       <NavCard />
       <HeroHeader />
+
+      <HowItWorks className="mb-5" />
 
       <div className="flex flex-wrap items-start gap-5">
         <section

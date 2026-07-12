@@ -26,16 +26,12 @@ import { BookieCard } from './bookie-card';
 import { MatchBoard } from './match-board';
 import { ReplayRibbon } from './replay-ribbon';
 import { SettlementLayer } from './settlement-layer';
+import { HowItWorks } from '../onboarding/how-it-works';
 import { formatClockMinutes, formatPoints } from '../../lib/format';
+import { SAMPLE_SPONSOR, SPONSORED_CATEGORY } from '../../lib/sponsor';
 
 // Punch + ring flash length on a fresh lock (sheet motion tokens).
 const JUST_LOCKED_MS = 500;
-
-// The sponsored-call ad unit (monetization surface, see docs/TECH_DOC.md): one
-// call category carries a sample "presented by" label. Sample brand for the
-// demo, not a real sponsorship; the point is the ad slot exists.
-const SPONSORED_CATEGORY: CallCategory = 'corner';
-const SAMPLE_SPONSOR = 'Volt';
 
 export type MatchScreenMode =
   | { kind: 'live'; fixtureId: number }
@@ -372,7 +368,9 @@ export function MatchScreen({
                         notice.outcome === 'hit' ? '' : 'text-ink-muted'
                       }`}
                     >
-                      {notice.outcome === 'hit' ? `+${formatPoints(notice.pointsAwarded)}` : '0'}
+                      {notice.outcome === 'hit'
+                        ? `+${formatPoints(notice.pointsAwarded)} pts`
+                        : '0 pts'}
                     </span>
                   </span>
                 </div>
@@ -465,6 +463,8 @@ export function MatchScreen({
           <ReconnectingBanner />
         </div>
       ) : null}
+
+      <HowItWorks className="mb-3.5" />
 
       <div className="flex flex-wrap items-start gap-5">
         <div className="min-w-0 flex-[1_1_430px]">

@@ -27,7 +27,7 @@ export function BookieCard({
       </span>
       <p className="mt-2 text-sm leading-normal text-white/85">
         {lastMirroredProbability === null ? (
-          'Mirrors every call you lock with the market favorite.'
+          'The Bookie always takes the market favorite. Beat it.'
         ) : (
           <>
             Mirrored your call at the market favorite{' '}

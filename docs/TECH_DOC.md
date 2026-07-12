@@ -148,32 +148,84 @@ settled +150 on a confirmed corner, merkle VALID, oracle VERIFIED (corners
   replay sessions push them through the same state and game pipeline at 1x,
   10x, or 60x, capped at 6 concurrent sessions with a 30 minute idle TTL, and
   fast-forward the pre-match head so a viewer lands at kickoff.
-- **93 tests** (42 engine, 51 worker) run against committed captures of real
+- **117 tests** (48 engine, 69 worker) run against committed captures of real
   matches, no network needed.
 - **Free-to-play by design.** No wallet, no signup: two taps from lobby to a
   locked call under a guest identity. The chain work happens server-side.
 
-## 💼 Business highlights and monetization path
+## 💼 Business model and monetization path
 
-CALLED IT is the free engagement layer that makes market data emotional: it
-gives every fan a skin-in-the-game feeling with zero stakes, and every win
-becomes a shareable, provable receipt (links unfurl as thermal-receipt cards).
+CALLED IT is the free engagement layer that makes market data emotional: every
+fan gets a skin-in-the-game feeling with zero stakes, and every win becomes a
+shareable, provable receipt (links unfurl as thermal-receipt cards).
 
-The monetization path, in order of proximity:
+### Three ad surfaces, live in the product today
 
-1. **Sponsored call windows.** "Corner in the next 10 minutes, presented by
-   [brand]" is a native ad unit priced by attention at the most tense moments
-   of a match. Shown in the app today as a sample "presented by" label on the
-   corner call (a demo of the ad slot, not a real sponsorship).
-2. **Premium private leagues.** Free public play; paid league creation for
-   friend groups, offices, and creators (custom prizes, season-long tables).
-3. **B2B white-label.** Broadcasters and rights holders embed the call deck,
-   probability pulse, and latency HUD next to their stream; CALLED IT supplies
-   the engine, TxLINE supplies the data.
+| Surface | Who buys it | Why it works | Working precedent |
+| --- | --- | --- | --- |
+| Pitchside board ("Match presented by") on the match cockpit | Consumer brands, per match or per territory | The frame around the screen fans watch at the emotional peak; football fans are conditioned to perimeter branding | Virtual perimeter ads are sold per match and per territory today (Bundesliga regional feeds, La Liga digital board replacement) |
+| Sponsored call category ("Presented by" on the corner call) | A brand buying a named in-match moment | Attention at the tensest minutes plus a fan action tied to the name | FIFA sells this exact unit at WC2026: the Lay's Chip Challenge prediction game; Michelob ULTRA bought the Player of the Match vote for all 104 matches |
+| The shared receipt and its public page `/r/{pickId}` | The match sponsor, priced as earned media | The sponsor line travels in group chats with every shared win, delivered off-platform by the fan | Sponsor-branded shareable moments (Budweiser's 2022 Player of the Match vote drove 10.8M social actions) |
+
+The demo shows one sample brand (Volt) on all three surfaces. The slot is the
+product, not the logo: every surface a bookmaker cannot legally give a fan,
+a free game can.
+
+### Why free-to-play is the moat, not the compromise
+
+Gambling regulation hinges on the prize-chance-consideration test: remove
+consideration (nothing paid, nothing staked) and the game is a promotion, not
+wagering; the UK Gambling Commission states that free prize competitions run
+within the Gambling Act 2005 rules need no licence. ESPN's Streak ran as a
+free game from 2008 to 2022 paying cash prizes under sweepstakes rules, and
+FIFA's own Match Predictor runs globally the same way. The commercial
+consequence: a real-money product's market is its licence map, while a free
+game's market is every fan with a phone on day one. FanDuel's executives
+describe free-to-play as their route to the half of the US where they cannot
+legally operate. CALLED IT starts where the betting apps legally cannot.
+
+### The ladder above the surfaces
+
+1. **Tournament sponsorship package.** One brand buys the theming, the three
+   surfaces, and aggregate audience insight for a whole tournament; Superbru
+   has sold exactly this bundle (Heineken, DHL) around its free predictors
+   since 2006.
+2. **B2B white-label.** The live-call engine, Bookie duel, and receipt chain
+   licensed to broadcasters and regulated operators as an acquisition and
+   retention funnel. Companies run on this model today: Low6 (Flutter's
+   Sportsbet, NFL teams), Chalkline (TwinSpires, JACK Entertainment),
+   Monterosa (ITV's World Cup predictor). TxLINE supplies the data; CALLED IT
+   supplies the engine.
+3. **Cosmetic-only consumer layer.** Receipt papers, stamps, and profile
+   flair: identity goods, the purchase motive the games research actually
+   supports. Never extra calls, never better prices, never a paid edge.
 4. **A consumer showcase for TxODDS.** The game demonstrates StablePrice and
    the oracle chain to a mainstream audience, the exact audience the data was
    never able to reach.
 
-Compliance posture: no stakes, no payouts, no odds display in betting format;
-points only. That keeps the product outside gambling regulation in most
-jurisdictions while preserving the thrill of being right.
+### Fan-first rules the design keeps on purpose
+
+The engagement literature documents how real-money products manufacture
+compulsion; CALLED IT is built as the counter-example, and that is a selling
+point, not a constraint:
+
+- Celebrations fire only on true hits; a miss renders flat and quiet. Slot
+  UIs celebrate net losses ("losses disguised as wins", Dixon et al. 2010);
+  this product never does.
+- The lock window is a real market constraint rendered calmly: no fake
+  countdowns, no manufactured panic (fake urgency is among the most common
+  documented dark patterns, Mathur et al. 2019).
+- The match bounds the session: half-time and full-time are natural stopping
+  points, the inversion of "time on device" design (Schüll 2012).
+- Everyone faces the same market. Selling edge is the fastest documented
+  trust-killer in games monetization (King and Delfabbro 2018; Petrovskaya
+  and Zendle 2021), so nothing purchasable ever touches pricing.
+- No loss-chasing prompts after a miss: neutral copy, next natural call.
+- The whole loop teaches itself in three steps ("How it works" strip), one
+  concept per step, verb-first labels: cognitive load research (Sweller) and
+  the Apple HIG onboarding guidance applied to a 10-second read.
+
+Compliance posture: no stakes, no payouts, no odds displayed in betting
+format; points only (the UI says "+150 pts", never a bare "+150"). That keeps
+the product outside gambling regulation in most jurisdictions while
+preserving the thrill of being right.

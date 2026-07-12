@@ -19,6 +19,68 @@ import type {
 
 export type MatchPhase = 'pre' | 'live' | 'finished';
 
+/**
+ * Squad and per-player data, reduced from the feed's lineups / jersey /
+ * PlayerStats records (all three are last-known state per fixture). The feed
+ * attributes ONLY goals, cards, substitutions, and injuries to a player; it
+ * never says who has the ball or who takes a corner, and it serves no player
+ * photos. These shapes carry exactly what it gives, nothing invented.
+ */
+export type SquadPositionGroup = 'gk' | 'def' | 'mid' | 'fwd' | 'unknown';
+
+export interface SquadPlayerEntry {
+  /** Feed normativeId; joins the MatchPlayerStatsPayload map keys. */
+  playerId: number;
+  /** Display name as served, e.g. "Messi, Lionel". */
+  name: string;
+  /** Shirt number as served; null when the feed omits it. */
+  number: string | null;
+  positionGroup: SquadPositionGroup;
+  starter: boolean;
+  /** Starter flag merged with substitutions and red cards. */
+  onPitch: boolean;
+}
+
+export interface TeamSquadPayload {
+  teamName: string;
+  /** From the jersey record, e.g. "white"; null before it arrives. */
+  jerseyColor: string | null;
+  players: SquadPlayerEntry[];
+}
+
+export interface MatchSquadsPayload {
+  p1: TeamSquadPayload | null;
+  p2: TeamSquadPayload | null;
+}
+
+export interface PlayerStatLineEntry {
+  goals: number;
+  yellowCards: number;
+  redCards: number;
+}
+
+/** Cumulative counters keyed by playerId (string), last-known per fixture. */
+export interface MatchPlayerStatsPayload {
+  p1: Record<string, PlayerStatLineEntry>;
+  p2: Record<string, PlayerStatLineEntry>;
+}
+
+export type PlayerActionKind =
+  | 'goal'
+  | 'yellow_card'
+  | 'red_card'
+  | 'sub_on'
+  | 'sub_off'
+  | 'injury';
+
+/** One attributed player moment, in arrival order (the player timeline). */
+export interface PlayerActionEntry {
+  kind: PlayerActionKind;
+  playerId: number;
+  team: PitchTeam | null;
+  clockSeconds: number;
+}
+
 export interface LatencySnapshot {
   lastMs: number;
   p50Ms: number;
@@ -42,6 +104,12 @@ export interface LivePayload {
   bookieDeck: CallOption[];
   /** Pressure-pitch momentum derived from possession/danger/market (no tracking). */
   momentum: PitchMomentum;
+  /** Both squads from the lineups records; null until the feed serves them. */
+  squads: MatchSquadsPayload | null;
+  /** Per-player cumulative counters; null until the feed serves them. */
+  playerStats: MatchPlayerStatsPayload | null;
+  /** Attributed player moments in arrival order (goals, cards, subs, injuries). */
+  playerActions: PlayerActionEntry[];
   latency: { scores: LatencySnapshot | null; odds: LatencySnapshot | null };
   updatedAtMs: number;
 }

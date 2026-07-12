@@ -1,7 +1,12 @@
 import { buildMomentum, generateCalls, pickBookieDeck, readStat } from '@calledit/engine';
-import type { LivePayload } from '@calledit/contracts';
+import type {
+  LivePayload,
+  MatchSquadsPayload,
+  SquadPositionGroup,
+  TeamSquadPayload,
+} from '@calledit/contracts';
 import { snapshotLatency, type LatencyTracker } from './latency.js';
-import { isInRunning, type MatchState } from './state.js';
+import { isInRunning, type MatchState, type StoredTeamSquad } from './state.js';
 
 /**
  * Shared LivePayload composition: the live path (main.ts, global store) and
@@ -11,6 +16,51 @@ import { isInRunning, type MatchState } from './state.js';
 
 // Events included in live payloads; the full timeline stays in the tape.
 export const LIVE_PAYLOAD_EVENT_LIMIT = 50;
+
+// Stable render order for squad rows: keeper line first, forwards last.
+const POSITION_GROUP_ORDER: Record<SquadPositionGroup, number> = {
+  gk: 0,
+  def: 1,
+  mid: 2,
+  fwd: 3,
+  unknown: 4,
+};
+
+function toTeamSquadPayload(
+  squad: StoredTeamSquad | null,
+  jerseyColor: string | null,
+  onPitchOverrides: Record<string, boolean>,
+): TeamSquadPayload | null {
+  if (squad === null) {
+    return null;
+  }
+  const players = squad.players
+    .map((player) => ({
+      ...player,
+      onPitch: onPitchOverrides[String(player.playerId)] ?? player.starter,
+    }))
+    .sort((left, right) => {
+      const groupDelta =
+        POSITION_GROUP_ORDER[left.positionGroup] - POSITION_GROUP_ORDER[right.positionGroup];
+      if (groupDelta !== 0) {
+        return groupDelta;
+      }
+      // Shirt numbers are served as strings; non-numeric ones sort last.
+      const leftNumber = Number.parseInt(left.number ?? '', 10);
+      const rightNumber = Number.parseInt(right.number ?? '', 10);
+      return (
+        (Number.isNaN(leftNumber) ? Number.MAX_SAFE_INTEGER : leftNumber) -
+        (Number.isNaN(rightNumber) ? Number.MAX_SAFE_INTEGER : rightNumber)
+      );
+    });
+  return { teamName: squad.teamName, jerseyColor, players };
+}
+
+function buildSquadsPayload(state: MatchState): MatchSquadsPayload | null {
+  const p1 = toTeamSquadPayload(state.squadP1, state.jerseyColorP1, state.onPitchOverrides);
+  const p2 = toTeamSquadPayload(state.squadP2, state.jerseyColorP2, state.onPitchOverrides);
+  return p1 === null && p2 === null ? null : { p1, p2 };
+}
 
 export function buildLivePayloadForState(
   state: MatchState,
@@ -48,6 +98,9 @@ export function buildLivePayloadForState(
     catalog,
     bookieDeck: pickBookieDeck(catalog),
     momentum,
+    squads: buildSquadsPayload(state),
+    playerStats: state.playerStats,
+    playerActions: state.playerActions,
     latency: { scores: snapshotLatency(scoresLatency), odds: snapshotLatency(oddsLatency) },
     updatedAtMs: state.updatedAtMs,
   };

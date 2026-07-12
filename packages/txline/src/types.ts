@@ -87,6 +87,8 @@ export interface SoccerData {
   Corner?: boolean;
   Goal?: boolean;
   Penalty?: boolean;
+  /** jersey action only: the team's shirt color, e.g. "white". */
+  Color?: string;
   /** action_amend only: which action kind was corrected. */
   Action?: string;
   /** action_amend only: corrected and prior event payloads. */
@@ -97,6 +99,57 @@ export interface SoccerData {
 export interface MatchClock {
   Running: boolean;
   Seconds: number;
+}
+
+/**
+ * Lineups payload (ground truth from the live mainnet feed, 2026-07-12,
+ * Argentina vs Switzerland; absent from the OpenAPI spec). One entry per
+ * team; `lineups` is the full squad, `starter` marks the eleven.
+ */
+export interface LineupPlayerIdentity {
+  /** Stable player id; joins the PlayerStats map keys. */
+  normativeId?: number;
+  country?: string;
+  dateOfBirth?: string;
+  /** Display name as served, e.g. "Messi, Lionel". */
+  preferredName?: string;
+}
+
+export interface LineupRosterEntry {
+  fixturePlayerId?: number;
+  statusId?: number;
+  /** Position group id; observed live: 34 GK, 35 DEF, 36 MID, 37 FWD. */
+  positionId?: number;
+  unitId?: number;
+  /** Shirt number, served as a string. */
+  rosterNumber?: string;
+  starter?: boolean;
+  starred?: boolean;
+  player?: LineupPlayerIdentity;
+}
+
+export interface LineupTeamEntry {
+  /** Team id; matches the record's Participant1Id / Participant2Id. */
+  normativeId?: number;
+  preferredName?: string;
+  lineups?: LineupRosterEntry[];
+}
+
+/** Per-player cumulative counters; keys are player normativeIds as strings. */
+export interface PlayerStatLine {
+  goals?: number;
+  yellowCards?: number;
+  redCards?: number;
+}
+
+/**
+ * PlayerStats rides only SOME score records (goals, cards); it is a cumulative
+ * snapshot, so the newest occurrence replaces the previous one wholesale.
+ * Observed live 2026-07-12; absent from the OpenAPI spec.
+ */
+export interface PlayerStatsRecord {
+  Participant1?: Record<string, PlayerStatLine>;
+  Participant2?: Record<string, PlayerStatLine>;
 }
 
 export type SoccerPossessionType =
@@ -136,7 +189,11 @@ export interface ScoresUpdate {
   PossibleEvent?: Record<string, boolean>;
   Parti1State?: unknown;
   Parti2State?: unknown;
-  Lineups?: unknown[];
+  Lineups?: LineupTeamEntry[];
+  /** Cumulative per-player counters; rides only some records (see type). */
+  PlayerStats?: PlayerStatsRecord;
+  /** kickoff_team action: which side kicks off. */
+  Kickoff?: { Team?: number };
   CompetitionId?: number;
   CountryId?: number;
   SportId?: number;

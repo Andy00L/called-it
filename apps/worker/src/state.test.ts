@@ -10,6 +10,8 @@ import {
   getMatchState,
   isInRunning,
 } from './state.js';
+import { buildLivePayloadForState } from './live-payload.js';
+import { createLatencyTracker } from './latency.js';
 
 // Real captured payloads (USA vs Bosnia, devnet SL1, 2026-07-02). Reused from
 // the engine package instead of duplicating a 40-record fixture here.
@@ -181,6 +183,149 @@ test('phase moves pre -> live -> finished and gates call generation', () => {
   assert.ok(finishedState !== undefined);
   assert.equal(finishedState.phase, 'finished');
   assert.equal(isInRunning(finishedState), false);
+});
+
+// Lineups shaped like the live 2026-07-12 capture (Argentina vs Switzerland),
+// shrunk to two players per team; ids join the PlayerStats keys below.
+const LINEUPS_UPDATE: ScoresUpdate = {
+  FixtureId: 88,
+  Ts: 100,
+  Action: 'lineups',
+  Participant1Id: 1489,
+  Participant2Id: 3099,
+  Lineups: [
+    {
+      normativeId: 1489,
+      preferredName: 'Argentina',
+      lineups: [
+        {
+          rosterNumber: '10',
+          positionId: 37,
+          starter: true,
+          player: { normativeId: 46557, preferredName: 'Messi, Lionel' },
+        },
+        {
+          rosterNumber: '22',
+          positionId: 37,
+          starter: false,
+          player: { normativeId: 948167, preferredName: 'Martinez, Lautaro Javier' },
+        },
+      ],
+    },
+    {
+      normativeId: 3099,
+      preferredName: 'Switzerland',
+      lineups: [
+        {
+          rosterNumber: '1',
+          positionId: 34,
+          starter: true,
+          player: { normativeId: 418624, preferredName: 'Sommer, Yann' },
+        },
+      ],
+    },
+  ],
+};
+
+test('lineups, jersey, and PlayerStats records fill the squad state', () => {
+  const store = createMatchStateStore();
+  applyScoresUpdate(store, LINEUPS_UPDATE, 1);
+  applyScoresUpdate(
+    store,
+    {
+      FixtureId: 88,
+      Ts: 110,
+      Action: 'jersey',
+      Participant: 2,
+      Data: { Color: 'white' },
+    },
+    2,
+  );
+  applyScoresUpdate(
+    store,
+    {
+      FixtureId: 88,
+      Ts: 120,
+      Action: 'goal',
+      Confirmed: true,
+      Participant: 1,
+      Clock: { Running: true, Seconds: 1380 },
+      Data: { PlayerId: 46557, GoalType: 'Shot' },
+      PlayerStats: { Participant1: { '46557': { goals: 1 } } },
+    },
+    3,
+  );
+
+  const state = getMatchState(store, 88);
+  assert.ok(state !== undefined);
+  assert.equal(state.squadP1?.teamName, 'Argentina');
+  assert.equal(state.squadP2?.teamName, 'Switzerland');
+  assert.equal(state.squadP1?.players[0]?.name, 'Messi, Lionel');
+  assert.equal(state.squadP1?.players[0]?.positionGroup, 'fwd');
+  assert.equal(state.squadP2?.players[0]?.positionGroup, 'gk');
+  assert.equal(state.jerseyColorP2, 'white');
+  assert.equal(state.jerseyColorP1, null);
+  assert.deepEqual(state.playerStats?.p1['46557'], { goals: 1, yellowCards: 0, redCards: 0 });
+  assert.deepEqual(state.playerActions, [
+    { kind: 'goal', playerId: 46557, team: 'p1', clockSeconds: 1380 },
+  ]);
+
+  // An older record cannot regress the cumulative PlayerStats snapshot.
+  applyScoresUpdate(
+    store,
+    { FixtureId: 88, Ts: 60, Action: 'comment', PlayerStats: { Participant1: {} } },
+    4,
+  );
+  assert.deepEqual(state.playerStats?.p1['46557'], { goals: 1, yellowCards: 0, redCards: 0 });
+});
+
+test('substitutions and red cards move players on and off the pitch', () => {
+  const store = createMatchStateStore();
+  applyScoresUpdate(store, LINEUPS_UPDATE, 1);
+  const substitution: ScoresUpdate = {
+    FixtureId: 88,
+    Ts: 200,
+    Id: 9001,
+    Action: 'substitution',
+    Confirmed: true,
+    Clock: { Running: true, Seconds: 3660 },
+    Data: { Participant: 1, PlayerInId: 948167, PlayerOutId: 46557 },
+  };
+  applyScoresUpdate(store, substitution, 2);
+  // A re-sent record must not duplicate the timeline or flip state twice.
+  applyScoresUpdate(store, substitution, 3);
+  applyScoresUpdate(
+    store,
+    {
+      FixtureId: 88,
+      Ts: 300,
+      Action: 'red_card',
+      Confirmed: true,
+      Participant: 2,
+      Clock: { Running: true, Seconds: 4000 },
+      Data: { PlayerId: 418624, Type: 'StraightRed' },
+    },
+    4,
+  );
+
+  const state = getMatchState(store, 88);
+  assert.ok(state !== undefined);
+  assert.deepEqual(
+    state.playerActions.map((action) => action.kind),
+    ['sub_off', 'sub_on', 'red_card'],
+  );
+
+  const payload = buildLivePayloadForState(state, createLatencyTracker(), createLatencyTracker());
+  assert.ok(payload.squads !== null);
+  const messi = payload.squads.p1?.players.find((player) => player.playerId === 46557);
+  const lautaro = payload.squads.p1?.players.find((player) => player.playerId === 948167);
+  const sommer = payload.squads.p2?.players.find((player) => player.playerId === 418624);
+  assert.equal(messi?.onPitch, false);
+  assert.equal(messi?.starter, true);
+  assert.equal(lautaro?.onPitch, true);
+  assert.equal(sommer?.onPitch, false);
+  assert.equal(payload.squads.p2?.jerseyColor, null);
+  assert.equal(payload.playerActions.length, 3);
 });
 
 test('the 1X2 StablePrice record sets match-result probabilities', () => {

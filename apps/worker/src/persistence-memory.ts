@@ -24,6 +24,7 @@ interface SettlementRow {
   pickId: string;
   outcome: 'hit' | 'miss';
   pointsAwarded: number;
+  nearMissSeconds: number | null;
 }
 
 interface PickCommitmentLink {
@@ -151,6 +152,7 @@ export function createMemoryPersistence(): PersistencePort {
         pickId: pick.id,
         outcome: input.outcome,
         pointsAwarded: input.pointsAwarded,
+        nearMissSeconds: null,
       });
       if (input.playerId !== null) {
         const player = players.get(input.playerId);
@@ -251,11 +253,79 @@ export function createMemoryPersistence(): PersistencePort {
         settlement:
           settlement === undefined
             ? null
-            : { outcome: settlement.outcome, pointsAwarded: settlement.pointsAwarded },
+            : {
+                outcome: settlement.outcome,
+                pointsAwarded: settlement.pointsAwarded,
+                nearMissSeconds: settlement.nearMissSeconds,
+              },
         commitment: commitment === undefined ? null : { ...commitment },
         leafIndex: link?.leafIndex ?? null,
         proof: link?.proof ?? null,
       });
+    },
+
+    listPicksForPlayerFixture: async (playerId, fixtureId) => {
+      const mirrorProbabilityByHumanPickId = new Map<string, number>();
+      for (const pick of picks.values()) {
+        if (pick.isBookie && pick.bookieOfPickId !== null) {
+          mirrorProbabilityByHumanPickId.set(pick.bookieOfPickId, pick.probabilityFraction);
+        }
+      }
+      return ok(
+        [...picks.values()]
+          .filter(
+            (pick) =>
+              !pick.isBookie && pick.playerId === playerId && pick.fixtureId === fixtureId,
+          )
+          .sort((left, right) => left.lockedAtMs - right.lockedAtMs)
+          .map((pick) => {
+            const settlement = settlements.get(pick.id);
+            return {
+              pick: { ...pick },
+              settlement:
+                settlement === undefined
+                  ? null
+                  : {
+                      outcome: settlement.outcome,
+                      pointsAwarded: settlement.pointsAwarded,
+                      nearMissSeconds: settlement.nearMissSeconds,
+                    },
+              bookieProbability: mirrorProbabilityByHumanPickId.get(pick.id) ?? null,
+            };
+          }),
+      );
+    },
+
+    recordNearMiss: async (pickId, nearMissSeconds) => {
+      const settlement = settlements.get(pickId);
+      if (settlement === undefined) {
+        return err(`near miss update failed: pick ${pickId} has no settlement`);
+      }
+      settlement.nearMissSeconds = nearMissSeconds;
+      return ok(undefined);
+    },
+
+    duelStats: async (sinceMs) => {
+      const stats = {
+        sinceMs,
+        humanSettled: 0,
+        humanHits: 0,
+        bookieSettled: 0,
+        bookieHits: 0,
+      };
+      for (const pick of picks.values()) {
+        if (pick.lockedAtMs < sinceMs || pick.status === 'pending') {
+          continue;
+        }
+        if (pick.isBookie) {
+          stats.bookieSettled += 1;
+          stats.bookieHits += pick.status === 'hit' ? 1 : 0;
+        } else {
+          stats.humanSettled += 1;
+          stats.humanHits += pick.status === 'hit' ? 1 : 0;
+        }
+      }
+      return ok(stats);
     },
 
     listSettledBookiePicksAgainstPlayer: async (playerId) => {

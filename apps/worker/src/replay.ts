@@ -6,6 +6,8 @@ import type { OddsPayload, ScoresUpdate } from '@calledit/txline';
 import type {
   LivePayload,
   LockResult,
+  MyPickEntry,
+  NearMissNotice,
   ProfilePayload,
   ReplayCreateResult,
   ReplaySessionInfo,
@@ -108,6 +110,7 @@ export interface ReplayManagerDeps {
   isFixtureLive(fixtureId: number): boolean;
   onState(sessionId: string): void;
   onSettlement(sessionId: string, notice: SettlementNotice): void;
+  onNearMiss(sessionId: string, notice: NearMissNotice): void;
   scheduler?: ReplayScheduler;
   nowMs?: () => number;
 }
@@ -118,6 +121,8 @@ export interface ReplayManager {
   sessionInfo(sessionId: string): Result<ReplaySessionInfo, string>;
   setSpeed(sessionId: string, rawSpeed: unknown): Result<ReplaySessionInfo, string>;
   lockPick(sessionId: string, rawOptionId: unknown): Promise<Result<LockResult, string>>;
+  /** The session's picks with settlements (the reload restore for replays). */
+  listPicks(sessionId: string): Promise<Result<MyPickEntry[], string>>;
   profile(sessionId: string): Promise<Result<ProfilePayload, string>>;
   /** Frame for the replay SSE channel; null before the first applied entry. */
   buildPayload(sessionId: string): LivePayload | null;
@@ -404,6 +409,7 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
         store,
         walletVerifier: replayWalletVerifier,
         onSettlement: (notice) => deps.onSettlement(sessionId, notice),
+        onNearMiss: (notice) => deps.onNearMiss(sessionId, notice),
         nowMs,
       });
       // The hidden session player: replay picks belong to it, in memory only.
@@ -475,6 +481,19 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
         session.guestPlayerToken,
         session.fixtureId,
         rawOptionId,
+      );
+    },
+
+    listPicks: async (sessionId) => {
+      const session = sessions.get(sessionId);
+      if (session === undefined) {
+        return err('unknown_session');
+      }
+      session.lastActivityMs = nowMs();
+      return session.game.listPlayerFixturePicks(
+        session.guestPlayerId,
+        session.guestPlayerToken,
+        session.fixtureId,
       );
     },
 

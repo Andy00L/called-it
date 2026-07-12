@@ -4,6 +4,7 @@ import {
   type EventWindowPredicate,
   type MatchEvent,
   type ProbHoldPredicate,
+  findNearMissEvent,
   resolveEventWindow,
   resolveProbHold,
 } from './calls.js';
@@ -70,6 +71,21 @@ test('card window matches yellow or red cards', () => {
   };
   assert.equal(resolveEventWindow(cardWindow, [yellow], 500), 'hit');
   assert.equal(resolveEventWindow(cardWindow, [red], 800), 'hit');
+});
+
+test('near miss finds the earliest matching event just past the window', () => {
+  const events = [corner(650, 2), corner(780, 1), corner(950, 1)];
+  const found = findNearMissEvent(cornerWindow, events, 300);
+  assert.equal(found?.clockSeconds, 650);
+});
+
+test('near miss ignores in-window, unconfirmed, wrong-team, and beyond-horizon events', () => {
+  assert.equal(findNearMissEvent(cornerWindow, [corner(500)], 300), null);
+  assert.equal(findNearMissEvent(cornerWindow, [corner(650, 1, false)], 300), null);
+  const p2Window: EventWindowPredicate = { ...cornerWindow, team: 'p2' };
+  assert.equal(findNearMissEvent(p2Window, [corner(650, 1)], 300), null);
+  assert.equal(findNearMissEvent(cornerWindow, [corner(901)], 300), null);
+  assert.equal(findNearMissEvent(cornerWindow, [corner(900)], 300)?.clockSeconds, 900);
 });
 
 const holdPredicate: ProbHoldPredicate = {

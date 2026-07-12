@@ -5,6 +5,7 @@ import nacl from 'tweetnacl';
 import { generateCalls, type CallOption } from '@calledit/engine';
 import { err, type OddsPayload, type ScoresUpdate } from '@calledit/txline';
 import { createGameService, type SettlementNotice } from './game.js';
+import type { NearMissNotice } from '@calledit/contracts';
 import { createMemoryPersistence } from './persistence-memory.js';
 import type { PersistencePort } from './persistence.js';
 import { createWalletVerifier } from './wallet-auth.js';
@@ -41,19 +42,22 @@ interface TestHarness {
   persistence: ReturnType<typeof createMemoryPersistence>;
   game: ReturnType<typeof createGameService>;
   notices: SettlementNotice[];
+  nearMisses: NearMissNotice[];
 }
 
 function createHarness(): TestHarness {
   const store = createMatchStateStore();
   const persistence = createMemoryPersistence();
   const notices: SettlementNotice[] = [];
+  const nearMisses: NearMissNotice[] = [];
   const game = createGameService({
     persistence,
     store,
     walletVerifier: createWalletVerifier(),
     onSettlement: (notice) => notices.push(notice),
+    onNearMiss: (notice) => nearMisses.push(notice),
   });
-  return { store, persistence, game, notices };
+  return { store, persistence, game, notices, nearMisses };
 }
 
 let nextTs = 1;
@@ -400,13 +404,15 @@ test('a transient settlement failure keeps the pick pending for the next pass', 
   };
   const store = createMatchStateStore();
   const notices: SettlementNotice[] = [];
+  const nearMisses: NearMissNotice[] = [];
   const game = createGameService({
     persistence,
     store,
     walletVerifier: createWalletVerifier(),
     onSettlement: (notice) => notices.push(notice),
+    onNearMiss: (notice) => nearMisses.push(notice),
   });
-  const harness: TestHarness = { store, persistence, game, notices };
+  const harness: TestHarness = { store, persistence, game, notices, nearMisses };
 
   primeLiveMatch(harness, 300, 600);
   const guest = await createGuest(harness);
@@ -567,4 +573,166 @@ test('a finished match sweeps every remaining pick to its final verdict', async 
   assert.ok(player.ok && player.value !== null);
   assert.equal(player.value.totalPoints, 0);
   assert.equal(player.value.currentStreak, 0);
+});
+
+test('a just-late event fires the near-miss notice once and persists the margin', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 900, 600);
+  const guest = await createGuest(harness);
+  const cornerOption = optionOf(catalogFor(harness, 900), 'corner');
+  assert.ok(cornerOption.predicate.kind === 'event_window');
+  const windowEnd = cornerOption.predicate.toClockSeconds;
+  const locked = await harness.game.lockPick(guest.playerId, guest.playerToken, 900, cornerOption.id);
+  assert.ok(locked.ok);
+
+  // A non-matching event pushes the clock past the window: the pick misses.
+  pushScores(harness, {
+    FixtureId: 900,
+    Action: 'yellow_card',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: windowEnd + 30 },
+  });
+  await harness.game.resolveFixture(900);
+  assert.ok(harness.notices.some((notice) => notice.outcome === 'miss'));
+  assert.equal(harness.nearMisses.length, 0);
+
+  // The corner lands 120 s past the deadline: one notice, factual margin.
+  pushScores(harness, {
+    FixtureId: 900,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 2,
+    Clock: { Running: true, Seconds: windowEnd + 120 },
+  });
+  await harness.game.resolveFixture(900);
+  assert.equal(harness.nearMisses.length, 1);
+  const nearMiss = harness.nearMisses[0];
+  assert.ok(nearMiss !== undefined);
+  assert.equal(nearMiss.pickId, locked.value.pick.id);
+  assert.equal(nearMiss.windowEndClockSeconds, windowEnd);
+  assert.equal(nearMiss.eventClockSeconds, windowEnd + 120);
+
+  // The margin is persisted with the settlement and served on the restore.
+  const restored = await harness.game.listPlayerFixturePicks(
+    guest.playerId,
+    guest.playerToken,
+    900,
+  );
+  assert.ok(restored.ok);
+  const restoredEntry = restored.value.find((entry) => entry.pick.id === locked.value.pick.id);
+  assert.ok(restoredEntry !== undefined);
+  assert.equal(restoredEntry.settlement?.nearMissSeconds, 120);
+
+  // A later matching event must not fire a second notice.
+  pushScores(harness, {
+    FixtureId: 900,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: windowEnd + 200 },
+  });
+  await harness.game.resolveFixture(900);
+  assert.equal(harness.nearMisses.length, 1);
+});
+
+test('an event beyond the near-miss horizon never reads as a near miss', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 901, 600);
+  const guest = await createGuest(harness);
+  const cornerOption = optionOf(catalogFor(harness, 901), 'corner');
+  assert.ok(cornerOption.predicate.kind === 'event_window');
+  const windowEnd = cornerOption.predicate.toClockSeconds;
+  const locked = await harness.game.lockPick(guest.playerId, guest.playerToken, 901, cornerOption.id);
+  assert.ok(locked.ok);
+
+  pushScores(harness, {
+    FixtureId: 901,
+    Action: 'yellow_card',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: windowEnd + 30 },
+  });
+  await harness.game.resolveFixture(901);
+
+  // 400 s past the deadline is beyond the 300 s horizon: unrelated play.
+  pushScores(harness, {
+    FixtureId: 901,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: windowEnd + 400 },
+  });
+  await harness.game.resolveFixture(901);
+  assert.equal(harness.nearMisses.length, 0);
+
+  const restored = await harness.game.listPlayerFixturePicks(
+    guest.playerId,
+    guest.playerToken,
+    901,
+  );
+  assert.ok(restored.ok);
+  assert.equal(restored.value[0]?.settlement?.nearMissSeconds, null);
+});
+
+test('the restore endpoint returns my picks with mirrors, and gates on auth', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 902, 600);
+  const guest = await createGuest(harness);
+  const cornerOption = optionOf(catalogFor(harness, 902), 'corner');
+  const locked = await harness.game.lockPick(guest.playerId, guest.playerToken, 902, cornerOption.id);
+  assert.ok(locked.ok);
+
+  const badToken = await harness.game.listPlayerFixturePicks(guest.playerId, 'wrong', 902);
+  assert.ok(!badToken.ok && badToken.error === 'auth_failed');
+
+  const pending = await harness.game.listPlayerFixturePicks(guest.playerId, guest.playerToken, 902);
+  assert.ok(pending.ok);
+  assert.equal(pending.value.length, 1);
+  assert.equal(pending.value[0]?.settlement, null);
+  // The Bookie mirrored the lock, so the restore carries its probability.
+  assert.equal(typeof pending.value[0]?.bookieProbability, 'number');
+
+  pushScores(harness, {
+    FixtureId: 902,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: 700 },
+  });
+  await harness.game.resolveFixture(902);
+
+  const settled = await harness.game.listPlayerFixturePicks(guest.playerId, guest.playerToken, 902);
+  assert.ok(settled.ok);
+  assert.equal(settled.value[0]?.settlement?.outcome, 'hit');
+  assert.equal(settled.value[0]?.settlement?.pointsAwarded, cornerOption.potentialPoints);
+});
+
+test('duel stats count settled human picks against their Bookie mirrors', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 903, 600);
+  const guest = await createGuest(harness);
+  const cornerOption = optionOf(catalogFor(harness, 903), 'corner');
+  const locked = await harness.game.lockPick(guest.playerId, guest.playerToken, 903, cornerOption.id);
+  assert.ok(locked.ok);
+
+  const beforeSettlement = await harness.game.duelStats();
+  assert.ok(beforeSettlement.ok);
+  assert.equal(beforeSettlement.value.humanSettled, 0);
+
+  pushScores(harness, {
+    FixtureId: 903,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: 700 },
+  });
+  await harness.game.resolveFixture(903);
+
+  const afterSettlement = await harness.game.duelStats();
+  assert.ok(afterSettlement.ok);
+  assert.equal(afterSettlement.value.humanSettled, 1);
+  assert.equal(afterSettlement.value.humanHits, 1);
+  // The ghost mirrored the same favored corner window, so it settled too.
+  assert.equal(afterSettlement.value.bookieSettled, 1);
 });

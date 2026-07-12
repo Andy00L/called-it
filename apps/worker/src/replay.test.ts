@@ -9,7 +9,7 @@ import {
   resolveEventWindow,
   type EventWindowPredicate,
 } from '@calledit/engine';
-import type { LivePayload, SettlementNotice } from '@calledit/contracts';
+import type { LivePayload, NearMissNotice, SettlementNotice } from '@calledit/contracts';
 import { appendTapeEntry, openTapeDeck, tapeFilePath, type TapeDeck } from './tape.js';
 import { createReplayManager, type ReplayManager, type ReplayScheduler } from './replay.js';
 
@@ -85,12 +85,14 @@ interface ManagerHarness {
   stepOnce(): Promise<boolean>;
   payloads: LivePayload[];
   settlements: SettlementNotice[];
+  nearMisses: NearMissNotice[];
 }
 
 function createHarness(deck: TapeDeck, options?: { liveFixtureIds?: number[] }): ManagerHarness {
   const { scheduler, stepOnce } = createManualScheduler();
   const payloads: LivePayload[] = [];
   const settlements: SettlementNotice[] = [];
+  const nearMisses: NearMissNotice[] = [];
   const manager = createReplayManager({
     deck,
     listFixtures: () => [],
@@ -104,9 +106,12 @@ function createHarness(deck: TapeDeck, options?: { liveFixtureIds?: number[] }):
     onSettlement: (unusedSessionId, notice) => {
       settlements.push(notice);
     },
+    onNearMiss: (unusedSessionId, notice) => {
+      nearMisses.push(notice);
+    },
     scheduler,
   });
-  return { manager, stepOnce, payloads, settlements };
+  return { manager, stepOnce, payloads, settlements, nearMisses };
 }
 
 test('a replayed match settles a locked call exactly as the engine says it should', async () => {

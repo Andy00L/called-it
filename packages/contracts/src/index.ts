@@ -108,6 +108,47 @@ export interface SettlementNotice {
   newStreak: number;
 }
 
+/**
+ * SSE "near_miss" event on /live/:fixtureId (and replay channels): a missed
+ * event-window pick whose matching event arrived just after the window. The
+ * data is the feed's own; the product prints it, never manufactures it.
+ */
+export interface NearMissNotice {
+  fixtureId: number;
+  pickId: string;
+  category: CallCategory;
+  claim: string;
+  windowEndClockSeconds: number;
+  eventClockSeconds: number;
+}
+
+/** One row of GET /players/picks/:fixtureId (the reload restore). */
+export interface MyPickEntry {
+  pick: PickRecord;
+  settlement: {
+    outcome: 'hit' | 'miss';
+    pointsAwarded: number;
+    /** Seconds past the window end the matching event arrived; null when none. */
+    nearMissSeconds: number | null;
+  } | null;
+  /** Probability of The Bookie's mirror at lock time; null when unmirrored. */
+  bookieProbability: number | null;
+}
+
+/** GET /players/picks/:fixtureId response. */
+export interface MyPicksPayload {
+  picks: MyPickEntry[];
+}
+
+/** GET /stats/duel response: fans versus The Bookie over the last day. */
+export interface DuelStats {
+  sinceMs: number;
+  humanSettled: number;
+  humanHits: number;
+  bookieSettled: number;
+  bookieHits: number;
+}
+
 /** One row of GET /leaderboard. */
 export interface LeaderboardEntry {
   playerId: string;
@@ -230,7 +271,12 @@ export interface OracleVerification {
 export interface ReceiptPayload {
   pick: PickRecord;
   playerHandle: string | null;
-  settlement: { outcome: 'hit' | 'miss'; pointsAwarded: number } | null;
+  settlement: {
+    outcome: 'hit' | 'miss';
+    pointsAwarded: number;
+    /** Near-miss margin in seconds past the window end; null when none. */
+    nearMissSeconds: number | null;
+  } | null;
   commitment: PickCommitment | null;
   /** Worker-side re-verification: leaf + proof recomputes the root. */
   proofValid: boolean | null;

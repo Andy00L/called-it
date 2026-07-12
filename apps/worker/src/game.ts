@@ -3,6 +3,7 @@ import {
   calibrationBuckets,
   computeBookieMargin,
   edgeVsMarket,
+  findNearMissEvent,
   generateCalls,
   marketBrierScore,
   nextStreak,
@@ -16,8 +17,11 @@ import {
 } from '@calledit/engine';
 import { err, ok, type Result } from '@calledit/txline';
 import type {
+  DuelStats,
   GuestSession,
   LockResult,
+  MyPickEntry,
+  NearMissNotice,
   ProfilePayload,
   SettlementNotice,
 } from '@calledit/contracts';
@@ -48,6 +52,14 @@ import type { WalletChallenge, WalletVerifier } from './wallet-auth.js';
 // (sourceRef: build plan rule "no call under 2 minutes from window end").
 const MIN_WINDOW_REMAINING_SECONDS = 120;
 
+// A matching event this long past the window still reads as "so close";
+// anything later is unrelated play (product choice for the honest near-miss).
+// Exported: main.ts recomputes read-time near-misses with the same horizon.
+export const NEAR_MISS_HORIZON_SECONDS = 300;
+
+// Duel stats window: the lobby line covers the last day of settled picks.
+const DUEL_STATS_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 // Default number of rows returned by leaderboard queries (product choice).
 const LEADERBOARD_LIMIT = 50;
 
@@ -69,6 +81,8 @@ export interface GameServiceDeps {
   walletVerifier: WalletVerifier;
   /** Called after each successful settlement (SSE fan-out). */
   onSettlement?: (notice: SettlementNotice) => void;
+  /** Called when a missed window's event arrives just late (SSE fan-out). */
+  onNearMiss?: (notice: NearMissNotice) => void;
   /** Injectable clock for tests; defaults to Date.now. */
   nowMs?: () => number;
 }
@@ -91,6 +105,14 @@ export interface GameService {
   leaderboardGlobal(): Promise<Result<LeaderboardEntry[], string>>;
   leaderboardFixture(fixtureId: number): Promise<Result<FixtureLeaderboardEntry[], string>>;
   profile(rawPlayerId: unknown): Promise<Result<ProfilePayload, string>>;
+  /** The authenticated player's picks on one fixture (the reload restore). */
+  listPlayerFixturePicks(
+    rawPlayerId: unknown,
+    rawPlayerToken: unknown,
+    rawFixtureId: unknown,
+  ): Promise<Result<MyPickEntry[], string>>;
+  /** Fans-versus-Bookie counters over the last day (the lobby duel line). */
+  duelStats(): Promise<Result<DuelStats, string>>;
   /** Issue a fresh single-use wallet-ownership challenge to sign. */
   issueWalletChallenge(): WalletChallenge;
   /** Link a wallet to the authenticated guest (claim their profile). */
@@ -130,6 +152,8 @@ export function createGameService(deps: GameServiceDeps): GameService {
   const nowMs = deps.nowMs ?? Date.now;
   /** fixtureId -> pickId -> pending pick (write-through cache over persistence). */
   const pendingByFixture = new Map<number, Map<string, PickRecord>>();
+  /** fixtureId -> pickId -> missed human window awaiting its near-miss event. */
+  const missedWindowsByFixture = new Map<number, Map<string, PickRecord>>();
   const fixturesResolving = new Set<number>();
   const fixturesNeedingRerun = new Set<number>();
   // Per-player settlement chain: streak is read-modify-written across two
@@ -245,6 +269,62 @@ export function createGameService(deps: GameServiceDeps): GameService {
     }
     pendingByFixture.get(pick.fixtureId)?.delete(pick.id);
     deps.onSettlement?.({ fixtureId: pick.fixtureId, pick, outcome, pointsAwarded, newStreak });
+    // A missed human window arms the near-miss watch: if its event lands just
+    // after the deadline, the post-mortem prints the factual margin.
+    if (outcome === 'miss' && !pick.isBookie && pick.predicate.kind === 'event_window') {
+      const fixtureMisses =
+        missedWindowsByFixture.get(pick.fixtureId) ?? new Map<string, PickRecord>();
+      fixtureMisses.set(pick.id, pick);
+      missedWindowsByFixture.set(pick.fixtureId, fixtureMisses);
+    }
+  };
+
+  /** Detect near-miss events for recently missed windows; drop stale watches. */
+  const scanNearMisses = async (fixtureId: number, state: MatchState): Promise<void> => {
+    const fixtureMisses = missedWindowsByFixture.get(fixtureId);
+    if (fixtureMisses === undefined || fixtureMisses.size === 0) {
+      return;
+    }
+    for (const pick of [...fixtureMisses.values()]) {
+      if (pick.predicate.kind !== 'event_window') {
+        fixtureMisses.delete(pick.id);
+        continue;
+      }
+      const windowEnd = pick.predicate.toClockSeconds;
+      const nearMissEvent = findNearMissEvent(
+        pick.predicate,
+        state.events,
+        NEAR_MISS_HORIZON_SECONDS,
+      );
+      if (nearMissEvent !== null) {
+        fixtureMisses.delete(pick.id);
+        const recorded = await deps.persistence.recordNearMiss(
+          pick.id,
+          nearMissEvent.clockSeconds - windowEnd,
+        );
+        if (!recorded.ok) {
+          // The SSE notice still fires; only durability degrades (0003 gate).
+          console.warn(`[scanNearMisses] ${recorded.error}`);
+        }
+        deps.onNearMiss?.({
+          fixtureId,
+          pickId: pick.id,
+          category: pick.category,
+          claim: pick.claim,
+          windowEndClockSeconds: windowEnd,
+          eventClockSeconds: nearMissEvent.clockSeconds,
+        });
+        continue;
+      }
+      // No more events can arrive after full time, and a watch past the
+      // horizon can never match: either way the entry is dead.
+      if (state.phase === 'finished' || state.clockSeconds > windowEnd + NEAR_MISS_HORIZON_SECONDS) {
+        fixtureMisses.delete(pick.id);
+      }
+    }
+    if (fixtureMisses.size === 0) {
+      missedWindowsByFixture.delete(fixtureId);
+    }
   };
 
   const settleOne = async (
@@ -276,17 +356,21 @@ export function createGameService(deps: GameServiceDeps): GameService {
 
   const resolveFixtureOnce = async (fixtureId: number): Promise<void> => {
     const state = getMatchState(deps.store, fixtureId);
-    const fixturePicks = pendingByFixture.get(fixtureId);
-    if (state === undefined || fixturePicks === undefined || fixturePicks.size === 0) {
+    if (state === undefined) {
       return;
     }
-    for (const pick of [...fixturePicks.values()]) {
-      const outcome = resolveOutcome(pick, state);
-      if (outcome === 'pending') {
-        continue;
+    const fixturePicks = pendingByFixture.get(fixtureId);
+    if (fixturePicks !== undefined && fixturePicks.size > 0) {
+      for (const pick of [...fixturePicks.values()]) {
+        const outcome = resolveOutcome(pick, state);
+        if (outcome === 'pending') {
+          continue;
+        }
+        await settleOne(pick, outcome, state);
       }
-      await settleOne(pick, outcome, state);
     }
+    // Runs even with no pending picks: near-miss watches outlive settlements.
+    await scanNearMisses(fixtureId, state);
   };
 
   return {
@@ -500,6 +584,24 @@ export function createGameService(deps: GameServiceDeps): GameService {
         walletPubkey: player.walletPubkey,
       });
     },
+
+    listPlayerFixturePicks: async (rawPlayerId, rawPlayerToken, rawFixtureId) => {
+      if (typeof rawPlayerId !== 'string' || typeof rawPlayerToken !== 'string') {
+        return err('auth_failed');
+      }
+      const fixtureId =
+        typeof rawFixtureId === 'number' ? rawFixtureId : Number.parseInt(String(rawFixtureId), 10);
+      if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+        return err('invalid_fixture_id');
+      }
+      const authenticated = await authenticate(rawPlayerId, rawPlayerToken);
+      if (!authenticated.ok) {
+        return authenticated;
+      }
+      return deps.persistence.listPicksForPlayerFixture(authenticated.value.id, fixtureId);
+    },
+
+    duelStats: () => deps.persistence.duelStats(nowMs() - DUEL_STATS_WINDOW_MS),
 
     issueWalletChallenge: () => deps.walletVerifier.issueChallenge(),
 

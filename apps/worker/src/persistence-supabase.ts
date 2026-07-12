@@ -78,6 +78,8 @@ interface SettlementRow {
   pick_id: string;
   outcome: 'hit' | 'miss';
   points_awarded: number;
+  /** Absent until db/migrations/0003_near_miss.sql runs; reads use select *. */
+  near_miss_seconds?: number | null;
 }
 
 function playerFromRow(row: PlayerRow): PlayerRecord {
@@ -403,9 +405,10 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
       }
       const pickRow = pickResult.data as PickRow;
 
+      // select * so the read works before AND after the 0003 near-miss column.
       const settlementResult = await client
         .from('settlements')
-        .select('pick_id, outcome, points_awarded')
+        .select('*')
         .eq('pick_id', pickId)
         .maybeSingle();
       if (settlementResult.error !== null) {
@@ -448,11 +451,118 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
         settlement:
           settlementRow === null
             ? null
-            : { outcome: settlementRow.outcome, pointsAwarded: settlementRow.points_awarded },
+            : {
+                outcome: settlementRow.outcome,
+                pointsAwarded: settlementRow.points_awarded,
+                nearMissSeconds: settlementRow.near_miss_seconds ?? null,
+              },
         commitment,
         leafIndex: pickRow.leaf_index,
         proof: pickRow.merkle_proof,
       });
+    },
+
+    listPicksForPlayerFixture: async (playerId, fixtureId) => {
+      const pickResult = await client
+        .from('picks')
+        .select('*')
+        .eq('player_id', playerId)
+        .eq('fixture_id', fixtureId)
+        .eq('is_bookie', false)
+        .order('locked_at', { ascending: true });
+      if (pickResult.error !== null) {
+        return err(`my picks select failed: ${pickResult.error.message}`);
+      }
+      const pickRows = (pickResult.data ?? []) as PickRow[];
+      if (pickRows.length === 0) {
+        return ok([]);
+      }
+      const pickIds = pickRows.map((row) => row.id);
+      // select * so the read works before AND after the 0003 near-miss column.
+      const settlementResult = await client
+        .from('settlements')
+        .select('*')
+        .in('pick_id', pickIds);
+      if (settlementResult.error !== null) {
+        return err(`my picks settlements select failed: ${settlementResult.error.message}`);
+      }
+      const settlementsByPickId = new Map(
+        ((settlementResult.data ?? []) as SettlementRow[]).map((row) => [row.pick_id, row]),
+      );
+      const mirrorResult = await client
+        .from('picks')
+        .select('bookie_of_pick_id, probability_fraction')
+        .eq('is_bookie', true)
+        .in('bookie_of_pick_id', pickIds);
+      if (mirrorResult.error !== null) {
+        return err(`my picks mirrors select failed: ${mirrorResult.error.message}`);
+      }
+      const mirrorRows = (mirrorResult.data ?? []) as Array<{
+        bookie_of_pick_id: string | null;
+        probability_fraction: number;
+      }>;
+      const mirrorProbabilityByHumanPickId = new Map<string, number>();
+      for (const mirrorRow of mirrorRows) {
+        if (mirrorRow.bookie_of_pick_id !== null) {
+          mirrorProbabilityByHumanPickId.set(
+            mirrorRow.bookie_of_pick_id,
+            Number(mirrorRow.probability_fraction),
+          );
+        }
+      }
+      return ok(
+        pickRows.map((row) => {
+          const settlementRow = settlementsByPickId.get(row.id);
+          return {
+            pick: pickFromRow(row),
+            settlement:
+              settlementRow === undefined
+                ? null
+                : {
+                    outcome: settlementRow.outcome,
+                    pointsAwarded: settlementRow.points_awarded,
+                    nearMissSeconds: settlementRow.near_miss_seconds ?? null,
+                  },
+            bookieProbability: mirrorProbabilityByHumanPickId.get(row.id) ?? null,
+          };
+        }),
+      );
+    },
+
+    recordNearMiss: async (pickId, nearMissSeconds) => {
+      const { error } = await client
+        .from('settlements')
+        .update({ near_miss_seconds: nearMissSeconds })
+        .eq('pick_id', pickId);
+      if (error !== null) {
+        // Distinct message: before 0003 runs the column is missing; the game
+        // service logs this and keeps going (the SSE notice still fires).
+        return err(`near miss update failed (run 0003_near_miss.sql?): ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
+    duelStats: async (sinceMs) => {
+      const { data, error } = await client
+        .from('picks')
+        .select('is_bookie, status')
+        .gte('locked_at', new Date(sinceMs).toISOString())
+        .neq('status', 'pending');
+      if (error !== null) {
+        return err(`duel stats select failed: ${error.message}`);
+      }
+      const rows = (data ?? []) as Array<{ is_bookie: boolean; status: PickStatus }>;
+      const stats = { sinceMs, humanSettled: 0, humanHits: 0, bookieSettled: 0, bookieHits: 0 };
+      for (const row of rows) {
+        if (row.is_bookie) {
+          stats.bookieSettled += 1;
+          stats.bookieHits += row.status === 'hit' ? 1 : 0;
+        } else {
+          stats.humanSettled += 1;
+          stats.humanHits += row.status === 'hit' ? 1 : 0;
+        }
+      }
+      return ok(stats);
     },
 
     listSettledBookiePicksAgainstPlayer: async (playerId) => {

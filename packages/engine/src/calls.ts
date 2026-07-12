@@ -93,6 +93,38 @@ export function resolveEventWindow(
 }
 
 /**
+ * First event that WOULD have hit the window, arriving after it closed. Powers
+ * the honest near-miss post-mortem: "the corner came 87', your window closed
+ * 85'". Only events within `horizonSeconds` past the window end count as near;
+ * later ones are unrelated play, not a near miss.
+ */
+export function findNearMissEvent(
+  predicate: EventWindowPredicate,
+  events: readonly MatchEvent[],
+  horizonSeconds: number,
+): MatchEvent | null {
+  let earliest: MatchEvent | null = null;
+  for (const event of events) {
+    if (!event.confirmed) {
+      continue;
+    }
+    if (!EVENT_ACTIONS[predicate.event].includes(event.action)) {
+      continue;
+    }
+    if (!teamMatches(predicate.team, event.participant)) {
+      continue;
+    }
+    const isPastWindow =
+      event.clockSeconds > predicate.toClockSeconds &&
+      event.clockSeconds <= predicate.toClockSeconds + horizonSeconds;
+    if (isPastWindow && (earliest === null || event.clockSeconds < earliest.clockSeconds)) {
+      earliest = event;
+    }
+  }
+  return earliest;
+}
+
+/**
  * Resolve a probability-hold call. Pending until the match clock reaches the target;
  * then hit if the observed probability is at or above the threshold, else miss.
  * `probabilityAtTarget` is the team's fraction observed at or after the target clock.

@@ -25,7 +25,8 @@ import { createFanout, type ApiResult } from './fanout.js';
 import { createSharedAuth, runIngest } from './ingest.js';
 import { createFixtureCatalog, summarizeFixtures } from './fixtures.js';
 import { readWorkerEnv } from './env.js';
-import { createGameService, type GameService } from './game.js';
+import { createGameService, NEAR_MISS_HORIZON_SECONDS, type GameService } from './game.js';
+import { findNearMissEvent } from '@calledit/engine';
 import { createMemoryPersistence } from './persistence-memory.js';
 import { createSupabasePersistence } from './persistence-supabase.js';
 import { createWalletVerifier } from './wallet-auth.js';
@@ -145,6 +146,16 @@ function buildApiHandler(game: GameService, receipts: ReceiptSource, replay: Rep
           }
           return { status: 200, body: sessionProfile.value };
         }
+        if (method === 'GET' && segments.length === 4 && segments[3] === 'picks') {
+          const sessionPicks = await replay.listPicks(sessionId);
+          if (!sessionPicks.ok) {
+            return {
+              status: statusForReplayError(sessionPicks.error),
+              body: { error: sessionPicks.error },
+            };
+          }
+          return { status: 200, body: { picks: sessionPicks.value } };
+        }
       }
       // GET /replay/sessions/:id/live is the SSE stream: fanout handles it.
     }
@@ -178,6 +189,26 @@ function buildApiHandler(game: GameService, receipts: ReceiptSource, replay: Rep
         return { status: statusForGameError(renamed.error), body: { error: renamed.error } };
       }
       return { status: 200, body: renamed.value };
+    }
+
+    if (method === 'GET' && segments.length === 3 && segments[0] === 'players' && segments[1] === 'picks') {
+      const myPicks = await game.listPlayerFixturePicks(
+        firstHeaderValue(headers['x-player-id']),
+        firstHeaderValue(headers['x-player-token']),
+        segments[2],
+      );
+      if (!myPicks.ok) {
+        return { status: statusForGameError(myPicks.error), body: { error: myPicks.error } };
+      }
+      return { status: 200, body: { picks: myPicks.value } };
+    }
+
+    if (method === 'GET' && segments.length === 2 && segments[0] === 'stats' && segments[1] === 'duel') {
+      const stats = await game.duelStats();
+      if (!stats.ok) {
+        return { status: 500, body: { error: stats.error } };
+      }
+      return { status: 200, body: stats.value };
     }
 
     if (method === 'POST' && segments.length === 2 && segments[0] === 'players' && segments[1] === 'challenge') {
@@ -315,6 +346,9 @@ async function main(): Promise<void> {
     onSettlement: (notice) => {
       fanout.broadcastEvent(notice.fixtureId, 'settlement', notice);
     },
+    onNearMiss: (notice) => {
+      fanout.broadcastEvent(notice.fixtureId, 'near_miss', notice);
+    },
   });
 
   // Oracle cross-check needs the wallet only as a read-only view signer;
@@ -344,6 +378,28 @@ async function main(): Promise<void> {
     const fixture = fixtureCatalog
       .listFixtures()
       .find((candidate) => candidate.FixtureId === record.pick.fixtureId);
+    // Near-miss fallback: before the 0003 column lands (or if the write
+    // failed), recompute the margin from the in-memory match events while the
+    // fixture state is still around. Persisted value wins when present.
+    let settlement = record.settlement;
+    if (
+      settlement !== null &&
+      settlement.outcome === 'miss' &&
+      settlement.nearMissSeconds === null &&
+      record.pick.predicate.kind === 'event_window'
+    ) {
+      const matchState = getMatchState(store, record.pick.fixtureId);
+      const nearMissEvent =
+        matchState === undefined
+          ? null
+          : findNearMissEvent(record.pick.predicate, matchState.events, NEAR_MISS_HORIZON_SECONDS);
+      if (nearMissEvent !== null) {
+        settlement = {
+          ...settlement,
+          nearMissSeconds: nearMissEvent.clockSeconds - record.pick.predicate.toClockSeconds,
+        };
+      }
+    }
     const leafHashHex = hashPickLeaf(record.pick);
     const hasProof =
       record.commitment !== null && record.proof !== null && record.leafIndex !== null;
@@ -356,7 +412,7 @@ async function main(): Promise<void> {
     return ok({
       pick: record.pick,
       playerHandle: record.playerHandle,
-      settlement: record.settlement,
+      settlement,
       oracleVerification,
       commitment:
         record.commitment === null || record.proof === null || record.leafIndex === null
@@ -404,6 +460,7 @@ async function main(): Promise<void> {
     },
     onState: (sessionId) => fanout.broadcastReplay(sessionId),
     onSettlement: (sessionId, notice) => fanout.broadcastReplayEvent(sessionId, 'settlement', notice),
+    onNearMiss: (sessionId, notice) => fanout.broadcastReplayEvent(sessionId, 'near_miss', notice),
   });
 
   const fanout = createFanout({

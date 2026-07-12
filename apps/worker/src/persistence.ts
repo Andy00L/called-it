@@ -1,8 +1,10 @@
 import type { Result } from '@calledit/txline';
 import type {
+  DuelStats,
   FixtureLeaderboardEntry,
   LeaderboardEntry,
   MerkleProofStep,
+  MyPickEntry,
   PickRecord,
   PickStatus,
 } from '@calledit/contracts';
@@ -71,7 +73,12 @@ export interface CommitmentAssignment {
 export interface ReceiptRecord {
   pick: PickRecord;
   playerHandle: string | null;
-  settlement: { outcome: 'hit' | 'miss'; pointsAwarded: number } | null;
+  settlement: {
+    outcome: 'hit' | 'miss';
+    pointsAwarded: number;
+    /** Near-miss margin persisted with the settlement; null when none/unknown. */
+    nearMissSeconds: number | null;
+  } | null;
   commitment: CommitmentRecord | null;
   leafIndex: number | null;
   proof: MerkleProofStep[] | null;
@@ -121,4 +128,15 @@ export interface PersistencePort {
   ): Promise<Result<void, string>>;
   /** Everything the public receipt needs; null when the pick is unknown. */
   getReceipt(pickId: string): Promise<Result<ReceiptRecord | null, string>>;
+  /** One player's picks on one fixture with settlements and Bookie mirrors
+   *  (the reload restore), oldest lock first. */
+  listPicksForPlayerFixture(
+    playerId: string,
+    fixtureId: number,
+  ): Promise<Result<MyPickEntry[], string>>;
+  /** Attach the near-miss margin to an already settled pick. Requires the
+   *  0003 migration on Supabase; the caller logs and continues on failure. */
+  recordNearMiss(pickId: string, nearMissSeconds: number): Promise<Result<void, string>>;
+  /** Fans-versus-Bookie counters over picks locked since the given time. */
+  duelStats(sinceMs: number): Promise<Result<DuelStats, string>>;
 }

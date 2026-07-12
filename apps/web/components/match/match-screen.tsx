@@ -594,6 +594,8 @@ export function MatchScreen({
               events={payload.recentEvents}
               participant1={participant1}
               participant2={participant2}
+              squads={payload.squads}
+              playerActions={payload.playerActions}
             />
           </div>
         </section>

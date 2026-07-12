@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { LivePayload, SettlementNotice } from '@calledit/contracts';
+import type { LivePayload, NearMissNotice, SettlementNotice } from '@calledit/contracts';
 import { workerUrl } from './api';
 
 export type LiveConnection = 'connecting' | 'open' | 'lost';
 
 // Settlements kept in memory; a match settles far fewer picks per viewer.
 const MAX_SETTLEMENTS_KEPT = 100;
+const MAX_NEAR_MISSES_KEPT = 50;
 
 export interface LiveMatchStream {
   payload: LivePayload | null;
   connection: LiveConnection;
   settlements: SettlementNotice[];
+  nearMisses: NearMissNotice[];
 }
 
 /**
@@ -26,6 +28,7 @@ export function useWorkerStream(channelPath: string): LiveMatchStream {
   const [payload, setPayload] = useState<LivePayload | null>(null);
   const [connection, setConnection] = useState<LiveConnection>('connecting');
   const [settlements, setSettlements] = useState<SettlementNotice[]>([]);
+  const [nearMisses, setNearMisses] = useState<NearMissNotice[]>([]);
 
   useEffect(() => {
     const source = new EventSource(`${workerUrl()}${channelPath}`);
@@ -46,21 +49,31 @@ export function useWorkerStream(channelPath: string): LiveMatchStream {
         console.error('[useWorkerStream] unparseable settlement frame, skipping');
       }
     };
+    const handleNearMiss = (event: MessageEvent<string>): void => {
+      try {
+        const notice = JSON.parse(event.data) as NearMissNotice;
+        setNearMisses((previous) => [...previous, notice].slice(-MAX_NEAR_MISSES_KEPT));
+      } catch {
+        console.error('[useWorkerStream] unparseable near-miss frame, skipping');
+      }
+    };
     const handleOpen = (): void => setConnection('open');
     const handleError = (): void => setConnection('lost');
 
     source.addEventListener('state', handleState);
     source.addEventListener('settlement', handleSettlement);
+    source.addEventListener('near_miss', handleNearMiss);
     source.addEventListener('open', handleOpen);
     source.addEventListener('error', handleError);
     return () => {
       source.removeEventListener('state', handleState);
       source.removeEventListener('settlement', handleSettlement);
+      source.removeEventListener('near_miss', handleNearMiss);
       source.close();
     };
   }, [channelPath]);
 
-  return { payload, connection, settlements };
+  return { payload, connection, settlements, nearMisses };
 }
 
 /**

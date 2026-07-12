@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { streakMultiplier, type SettlementNotice } from '@calledit/contracts';
 import { Button } from '../ui/button';
 import { buttonClassName } from '../ui/button-styles';
+import { playReceiptPrintFeedback } from '../../lib/print-feedback';
+import { usePrefersReducedMotion } from '../../lib/use-reduced-motion';
 import {
   formatClockMinutes,
   formatMultiplier,
@@ -44,8 +46,23 @@ export function SettlementLayer({
   isReplay: boolean;
 }) {
   const [dismissedIds, setDismissedIds] = useState<ReadonlySet<string>>(new Set());
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const printFeedbackPlayedForRef = useRef<string | null>(null);
 
   const active = settlements.filter((notice) => !dismissedIds.has(notice.pick.id)).at(-1);
+
+  // The print-in gets its physical layer once per hit (external systems:
+  // audio hardware and the vibration motor; armed by the lock press).
+  useEffect(() => {
+    if (active === undefined || active.outcome !== 'hit') {
+      return;
+    }
+    if (printFeedbackPlayedForRef.current === active.pick.id) {
+      return;
+    }
+    printFeedbackPlayedForRef.current = active.pick.id;
+    playReceiptPrintFeedback(prefersReducedMotion);
+  }, [active, prefersReducedMotion]);
 
   const dismiss = (pickId: string): void => {
     setDismissedIds((previous) => new Set(previous).add(pickId));

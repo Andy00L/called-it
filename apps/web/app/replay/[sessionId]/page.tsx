@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { fetchReplayTapes } from '../../../lib/api';
 import { fetchReplaySession } from '../../../lib/replay-api';
+import { resolveSponsorName } from '../../../lib/sponsor';
 import { MatchScreen } from '../../../components/match/match-screen';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Tray } from '../../../components/ui/surface';
@@ -13,10 +14,13 @@ import { buttonClassName } from '../../../components/ui/button-styles';
  */
 export default async function ReplayPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ sponsor?: string | string[] }>;
 }) {
   const { sessionId } = await params;
+  const { sponsor } = await searchParams;
   const sessionResult = await fetchReplaySession(sessionId);
 
   if (!sessionResult.ok) {
@@ -59,6 +63,7 @@ export default async function ReplayPage({
         participant2={tape?.participant2 ?? 'Away side'}
         competition={tape?.competition ?? 'World Cup'}
         startTimeMs={0}
+        sponsorName={resolveSponsorName(sponsor)}
       />
     </main>
   );

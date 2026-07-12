@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { fetchFixtures, fetchReplayTapes } from '../lib/api';
+import { fetchDuelStats, fetchFixtures, fetchReplayTapes } from '../lib/api';
 import { EmptyState } from '../components/ui/empty-state';
 import { Eyebrow } from '../components/ui/eyebrow';
 import { Card, Tray } from '../components/ui/surface';
 import { buttonClassName } from '../components/ui/button-styles';
 import { LiveFixtureRow, UpcomingFixtureRow } from '../components/lobby/fixture-card';
 import { ReplayTapeRow } from '../components/lobby/replay-row';
+import { DuelLine } from '../components/lobby/duel-line';
 import { HowItWorks } from '../components/onboarding/how-it-works';
 
 function NavCard() {
@@ -46,7 +47,12 @@ function HeroHeader() {
 }
 
 export default async function LobbyPage() {
-  const [fixturesResult, tapesResult] = await Promise.all([fetchFixtures(), fetchReplayTapes()]);
+  const [fixturesResult, tapesResult, duelResult] = await Promise.all([
+    fetchFixtures(),
+    fetchReplayTapes(),
+    fetchDuelStats(),
+  ]);
+  const duelStats = duelResult.ok ? duelResult.stats : null;
 
   if (!fixturesResult.ok) {
     return (
@@ -108,6 +114,8 @@ export default async function LobbyPage() {
     <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
       <NavCard />
       <HeroHeader />
+      {/* Pulls into the hero's bottom margin so the line reads as its coda. */}
+      <DuelLine stats={duelStats} className="-mt-9 mb-14" />
 
       <HowItWorks className="mb-5" />
 

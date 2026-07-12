@@ -91,7 +91,7 @@ const STEPS: HowItWorksStep[] = [
   },
   {
     title: 'Lock it in',
-    body: 'One tap before the window closes. The Bookie mirrors you with the market favorite.',
+    body: 'Hold the button before the window closes. The Bookie mirrors you with the market favorite.',
     picto: LockPicto,
   },
   {

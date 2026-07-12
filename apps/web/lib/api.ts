@@ -1,4 +1,5 @@
 import type {
+  DuelStats,
   FixtureLeaderboardEntry,
   FixtureSummary,
   LeaderboardEntry,
@@ -86,6 +87,28 @@ export async function fetchFixtures(): Promise<FixturesResult> {
 export async function fetchReplayTapes(): Promise<ReplayTapesResult> {
   const result = await fetchJsonArray<ReplayTapeSummary>('/replay/tapes');
   return result.ok ? { ok: true, tapes: result.rows } : result;
+}
+
+export type DuelStatsResult =
+  | { ok: true; stats: DuelStats }
+  | { ok: false; reason: ListFailure };
+
+/** Fans-versus-Bookie counters for the lobby duel line; always fresh. */
+export async function fetchDuelStats(): Promise<DuelStatsResult> {
+  let response: Response;
+  try {
+    response = await fetch(`${workerUrl()}/stats/duel`, { cache: 'no-store' });
+  } catch {
+    return { ok: false, reason: 'unreachable' };
+  }
+  if (!response.ok) {
+    return { ok: false, reason: 'bad_status' };
+  }
+  try {
+    return { ok: true, stats: (await response.json()) as DuelStats };
+  } catch {
+    return { ok: false, reason: 'bad_payload' };
+  }
 }
 
 /** Pick ids are UUIDs; cheap shape check before hitting the worker. */

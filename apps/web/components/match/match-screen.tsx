@@ -6,13 +6,20 @@ import type {
   CallCategory,
   CallOption,
   GuestSession,
+  MyPickEntry,
   PickRecord,
   SettlementNotice,
 } from '@calledit/contracts';
 import { useTickingClock, useWorkerStream } from '../../lib/use-live-match';
 import { ensureGuestSession, clearStoredSession, readStoredSession } from '../../lib/player';
-import { lockPick, LOCK_FAILURE_COPY } from '../../lib/game-api';
-import { lockReplayPick, setReplaySpeed, REPLAY_FAILURE_COPY } from '../../lib/replay-api';
+import { fetchMyPicks, lockPick, LOCK_FAILURE_COPY } from '../../lib/game-api';
+import {
+  fetchReplayPicks,
+  lockReplayPick,
+  setReplaySpeed,
+  REPLAY_FAILURE_COPY,
+} from '../../lib/replay-api';
+import { armPrintFeedback } from '../../lib/print-feedback';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { Eyebrow } from '../ui/eyebrow';
@@ -26,9 +33,11 @@ import { BookieCard } from './bookie-card';
 import { MatchBoard } from './match-board';
 import { ReplayRibbon } from './replay-ribbon';
 import { SettlementLayer } from './settlement-layer';
+import { NearMissLayer } from './near-miss-layer';
+import { FinalEditionCard, type SettledRow } from './final-edition';
 import { HowItWorks } from '../onboarding/how-it-works';
-import { formatClockMinutes, formatPoints } from '../../lib/format';
-import { SAMPLE_SPONSOR, SPONSORED_CATEGORY } from '../../lib/sponsor';
+import { formatClockMinutes } from '../../lib/format';
+import { SPONSORED_CATEGORY } from '../../lib/sponsor';
 
 // Punch + ring flash length on a fresh lock (sheet motion tokens).
 const JUST_LOCKED_MS = 500;
@@ -162,16 +171,19 @@ export function MatchScreen({
   participant2,
   competition,
   startTimeMs,
+  sponsorName,
 }: {
   mode: MatchScreenMode;
   participant1: string;
   participant2: string;
   competition: string;
   startTimeMs: number;
+  /** Resolved match sponsor (the ?sponsor= demo); rides all three surfaces. */
+  sponsorName: string;
 }) {
   const channelPath =
     mode.kind === 'live' ? `/live/${mode.fixtureId}` : `/replay/sessions/${mode.sessionId}/live`;
-  const { payload, connection, settlements } = useWorkerStream(channelPath);
+  const { payload, connection, settlements, nearMisses } = useWorkerStream(channelPath);
   const displayClockSeconds = useTickingClock(payload);
 
   const [session, setSession] = useState<GuestSession | null>(null);
@@ -194,6 +206,40 @@ export function MatchScreen({
     setSession(readStoredSession());
   }, []);
 
+  // The picks a reload wiped from memory, restored from the worker (they were
+  // never gone server-side). Pending ones re-seed the lock state; settled
+  // ones re-enter the list and the points (external system: worker HTTP).
+  const [restoredEntries, setRestoredEntries] = useState<MyPickEntry[]>([]);
+  useEffect(() => {
+    const abortController = new AbortController();
+    const restorePicks = async (): Promise<void> => {
+      const fetched =
+        mode.kind === 'replay'
+          ? await fetchReplayPicks(mode.sessionId)
+          : session !== null
+            ? await fetchMyPicks(session, mode.fixtureId)
+            : null;
+      if (fetched === null || !fetched.ok || abortController.signal.aborted) {
+        return;
+      }
+      setRestoredEntries(fetched.entries);
+      setLockedByCategory((previous) => {
+        const next = new Map(previous);
+        for (const entry of fetched.entries) {
+          if (entry.settlement === null && !next.has(entry.pick.category)) {
+            next.set(entry.pick.category, {
+              pick: entry.pick,
+              bookieProbability: entry.bookieProbability,
+            });
+          }
+        }
+        return next;
+      });
+    };
+    void restorePicks();
+    return () => abortController.abort();
+  }, [mode, session]);
+
   useEffect(() => {
     if (justLockedCategory === null) {
       return;
@@ -214,6 +260,9 @@ export function MatchScreen({
   };
 
   const handleLock = async (option: CallOption): Promise<void> => {
+    // The lock interaction is the user gesture that unlocks the receipt's
+    // print sound later (settlements arrive over SSE, never as gestures).
+    armPrintFeedback();
     setLockingCategory(option.category);
     setLockErrors((previous) => {
       const next = new Map(previous);
@@ -302,9 +351,41 @@ export function MatchScreen({
   const isMine = (notice: SettlementNotice): boolean =>
     mode.kind === 'replay'
       ? !notice.pick.isBookie
-      : [...lockedByCategory.values()].some((entry) => entry.pick.id === notice.pick.id);
+      : [...lockedByCategory.values()].some((entry) => entry.pick.id === notice.pick.id) ||
+        restoredEntries.some((entry) => entry.pick.id === notice.pick.id);
   const mySettlements = settlements.filter(isMine);
-  const settledPickIds = new Set(mySettlements.map((notice) => notice.pick.id));
+  const nearMissByPickId = new Map(
+    nearMisses.map((notice) => [
+      notice.pickId,
+      notice.eventClockSeconds - notice.windowEndClockSeconds,
+    ]),
+  );
+  const sseRows: SettledRow[] = mySettlements.map((notice) => ({
+    pick: notice.pick,
+    outcome: notice.outcome,
+    pointsAwarded: notice.pointsAwarded,
+    nearMissSeconds: nearMissByPickId.get(notice.pick.id) ?? null,
+  }));
+  const sseRowIds = new Set(sseRows.map((row) => row.pick.id));
+  // Reload-restored settlements lead (they happened earlier), deduped against
+  // anything the live stream already delivered this session.
+  const settledRows: SettledRow[] = [
+    ...restoredEntries.flatMap((entry) =>
+      entry.settlement === null || sseRowIds.has(entry.pick.id)
+        ? []
+        : [
+            {
+              pick: entry.pick,
+              outcome: entry.settlement.outcome,
+              pointsAwarded: entry.settlement.pointsAwarded,
+              nearMissSeconds:
+                nearMissByPickId.get(entry.pick.id) ?? entry.settlement.nearMissSeconds,
+            },
+          ],
+    ),
+    ...sseRows,
+  ];
+  const settledPickIds = new Set(settledRows.map((row) => row.pick.id));
   const pendingMine = [...lockedByCategory.values()].filter(
     (entry) => !settledPickIds.has(entry.pick.id),
   );
@@ -313,10 +394,38 @@ export function MatchScreen({
     const entry = lockedByCategory.get(category);
     return entry !== undefined && !settledPickIds.has(entry.pick.id) ? entry : undefined;
   };
-  const sessionPoints = mySettlements.reduce((sum, notice) => sum + notice.pointsAwarded, 0);
+  const sessionPoints = settledRows.reduce((sum, row) => sum + row.pointsAwarded, 0);
   const lastBookieProbability =
     [...lockedByCategory.values()].map((entry) => entry.bookieProbability).at(-1) ?? null;
   const fixtureLine = `${participant1} vs ${participant2} (${competition})`;
+  // Peak-end (Kahneman): the best hit leads the final edition and carries
+  // the share action, so every session ends on its peak.
+  const bestRow = settledRows
+    .filter((row) => row.outcome === 'hit')
+    .reduce<SettledRow | undefined>(
+      (best, row) => (best === undefined || row.pointsAwarded > best.pointsAwarded ? row : best),
+      undefined,
+    );
+  const finalEditionRows =
+    bestRow === undefined
+      ? settledRows
+      : [bestRow, ...settledRows.filter((row) => row.pick.id !== bestRow.pick.id)];
+  // First-visit nudge (the HIG playable-tutorial idea): mark the likeliest
+  // call, never pre-pick it. A guest session only exists after a first lock,
+  // so its absence IS the first-visit signal; the marker dies at that lock.
+  const suggestedOptionId =
+    session === null && lockedByCategory.size === 0 && payload.phase === 'live'
+      ? (payload.catalog.reduce<CallOption | null>(
+          (best, option) =>
+            best === null || option.probabilityFraction > best.probabilityFraction
+              ? option
+              : best,
+          null,
+        )?.id ?? null)
+      : null;
+  const myNearMisses = nearMisses.filter(
+    (notice) => mode.kind === 'replay' || settledPickIds.has(notice.pickId),
+  );
 
   const callsSection =
     payload.phase === 'pre' ? (
@@ -335,56 +444,13 @@ export function MatchScreen({
         />
       </Tray>
     ) : payload.phase === 'finished' ? (
-      mySettlements.length > 0 ? (
-        <Tray className="p-2">
-          <div className="mx-2.5 mb-2 mt-1.5 flex">
-            <Eyebrow>Your settled calls</Eyebrow>
-          </div>
-          <Card className="p-4 sm:px-4.5">
-            {mySettlements.map((notice, index) => (
-              <div key={notice.pick.id}>
-                {index === 0 ? null : <div className="rule-dashed my-3" />}
-                <div className="flex items-baseline justify-between gap-3">
-                  {mode.kind === 'live' ? (
-                    <Link
-                      href={`/r/${notice.pick.id}`}
-                      className="truncate text-sm font-medium underline decoration-hairline underline-offset-2"
-                    >
-                      {notice.pick.claim}
-                    </Link>
-                  ) : (
-                    <span className="truncate text-sm font-medium">{notice.pick.claim}</span>
-                  )}
-                  <span className="flex flex-none items-baseline gap-2">
-                    <span
-                      className={`font-mono text-xs font-semibold ${
-                        notice.outcome === 'hit' ? 'text-accent-deep' : 'text-miss'
-                      }`}
-                    >
-                      {notice.outcome}
-                    </span>
-                    <span
-                      className={`tabular font-mono text-sm font-semibold ${
-                        notice.outcome === 'hit' ? '' : 'text-ink-muted'
-                      }`}
-                    >
-                      {notice.outcome === 'hit'
-                        ? `+${formatPoints(notice.pointsAwarded)} pts`
-                        : '0 pts'}
-                    </span>
-                  </span>
-                </div>
-              </div>
-            ))}
-            <div className="rule-dashed my-3" />
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-[13px] text-ink-muted">Points this match</span>
-              <span className="tabular font-mono text-base font-semibold">
-                {formatPoints(sessionPoints)}
-              </span>
-            </div>
-          </Card>
-        </Tray>
+      settledRows.length > 0 ? (
+        <FinalEditionCard
+          rows={finalEditionRows}
+          bestPickId={bestRow?.pick.id ?? null}
+          sessionPoints={sessionPoints}
+          withReceiptLinks={mode.kind === 'live'}
+        />
       ) : (
         <Tray className="p-2">
           <div className="mx-2.5 mb-2 mt-1.5 flex">
@@ -426,7 +492,8 @@ export function MatchScreen({
                     lockError={lockErrors.get(option.category)}
                     justLocked={justLockedCategory === option.category}
                     enterDelayMs={index * 40}
-                    sponsor={option.category === SPONSORED_CATEGORY ? SAMPLE_SPONSOR : undefined}
+                    sponsor={option.category === SPONSORED_CATEGORY ? sponsorName : undefined}
+                    isSuggested={option.id === suggestedOptionId}
                     onLock={(picked) => {
                       void handleLock(picked);
                     }}
@@ -477,7 +544,7 @@ export function MatchScreen({
             connectionLost={connection === 'lost'}
             pitchReduced={pitchReduced}
             onTogglePitch={togglePitch}
-            sponsor={SAMPLE_SPONSOR}
+            sponsor={sponsorName}
           />
         </div>
 
@@ -538,6 +605,7 @@ export function MatchScreen({
         playerHandle={mode.kind === 'live' ? (session?.handle ?? null) : null}
         isReplay={mode.kind === 'replay'}
       />
+      <NearMissLayer notices={myNearMisses} />
     </div>
   );
 }

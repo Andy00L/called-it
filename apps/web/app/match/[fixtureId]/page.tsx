@@ -1,13 +1,17 @@
 import { notFound } from 'next/navigation';
 import { fetchFixtures } from '../../../lib/api';
+import { resolveSponsorName } from '../../../lib/sponsor';
 import { MatchScreen } from '../../../components/match/match-screen';
 
 export default async function MatchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ fixtureId: string }>;
+  searchParams: Promise<{ sponsor?: string | string[] }>;
 }) {
   const { fixtureId: rawFixtureId } = await params;
+  const { sponsor } = await searchParams;
   const fixtureId = Number.parseInt(rawFixtureId, 10);
   if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
     notFound();
@@ -27,6 +31,7 @@ export default async function MatchPage({
         participant2={fixture?.participant2 ?? 'Away side'}
         competition={fixture?.competition ?? 'World Cup'}
         startTimeMs={fixture?.startTimeMs ?? 0}
+        sponsorName={resolveSponsorName(sponsor)}
       />
     </main>
   );

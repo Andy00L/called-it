@@ -98,6 +98,16 @@ export function ReceiptTicket({ receipt }: { receipt: ReceiptPayload }) {
               </b>
             )}
           </div>
+          {settlement !== null &&
+          settlement.outcome === 'miss' &&
+          settlement.nearMissSeconds !== null &&
+          pick.predicate.kind === 'event_window' ? (
+            <p className="opacity-60">
+              so close: the {pick.category} came{' '}
+              {formatClockMinutes(pick.predicate.toClockSeconds + settlement.nearMissSeconds)},
+              window closed {formatClockMinutes(pick.predicate.toClockSeconds)}
+            </p>
+          ) : null}
 
           <PaperRule />
 

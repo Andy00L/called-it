@@ -90,16 +90,23 @@ export function MatchCockpit({
         </div>
 
         {sponsor !== undefined ? (
-          <div className="rule-dashed flex items-center justify-center gap-2.5 px-4 py-2.5">
-            <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
-              Match presented by
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span aria-hidden className="size-1 rounded-full bg-accent" />
-              <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-ink">
-                {sponsor}
+          <div className="rule-dashed flex flex-col items-center gap-1 px-4 py-2.5">
+            <div className="flex items-center justify-center gap-2.5">
+              <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+                Match presented by
               </span>
-            </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className="size-1 rounded-full bg-accent" />
+                <span className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-ink">
+                  {sponsor}
+                </span>
+              </span>
+            </div>
+            {/* The sponsored-jackpot ad unit, shown as a sample slot (see
+                docs/TECH_DOC.md: prize-indemnity precedent). No real prize. */}
+            <p className="text-center font-mono text-[10px] uppercase tracking-[0.14em] text-ink-muted">
+              Sample slot: 3 hits in one half enters the {sponsor} draw
+            </p>
           </div>
         ) : null}
       </Card>

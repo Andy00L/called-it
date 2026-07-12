@@ -3,7 +3,7 @@
 import type { ButtonHTMLAttributes } from 'react';
 import { buttonClassName, type ButtonVariant } from './button-styles';
 
-function ButtonSpinner() {
+export function ButtonSpinner() {
   return (
     <svg
       aria-hidden

@@ -8,7 +8,7 @@ import { Tray } from '../../../components/ui/surface';
 import { buttonClassName } from '../../../components/ui/button-styles';
 import { ReceiptTicket } from '../../../components/receipt/receipt-ticket';
 import { ReceiptActions } from '../../../components/receipt/receipt-actions';
-import { SAMPLE_SPONSOR } from '../../../lib/sponsor';
+import { resolveSponsorName } from '../../../lib/sponsor';
 
 function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
   return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;
@@ -61,10 +61,13 @@ function WordmarkBar() {
 // (db RLS: picks and settlements are world-readable, no secrets on them).
 export default async function ReceiptPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ pickId: string }>;
+  searchParams: Promise<{ sponsor?: string | string[] }>;
 }) {
   const { pickId } = await params;
+  const { sponsor } = await searchParams;
   // Pick ids are UUIDs; anything else is not found by construction.
   if (!isPickIdShaped(pickId)) {
     notFound();
@@ -116,7 +119,9 @@ export default async function ReceiptPage({
           Match presented by
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden className="size-1 rounded-full bg-accent" />
-            <span className="text-[11px] font-semibold text-ink">{SAMPLE_SPONSOR}</span>
+            <span className="text-[11px] font-semibold text-ink">
+              {resolveSponsorName(sponsor)}
+            </span>
           </span>
         </p>
       </div>

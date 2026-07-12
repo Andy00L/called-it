@@ -1,4 +1,4 @@
-import type { GuestSession, LockResult, ProfilePayload } from '@calledit/contracts';
+import type { GuestSession, LockResult, MyPickEntry, ProfilePayload } from '@calledit/contracts';
 import { workerUrl } from './api';
 
 /** Client for the game routes. Every failure mode is distinct and typed. */
@@ -127,6 +127,41 @@ export const RENAME_FAILURE_COPY: Record<RenameFailure, string> = {
   network: 'Could not reach the game server. Check your connection and retry.',
   server: 'The game server had a hiccup. Retry in a moment.',
 };
+
+export type MyPicksOutcome =
+  | { ok: true; entries: MyPickEntry[] }
+  | { ok: false; reason: 'auth_failed' | 'network' | 'server' };
+
+/** GET /players/picks/:fixtureId: my picks on this match (the reload restore). */
+export async function fetchMyPicks(
+  session: GuestSession,
+  fixtureId: number,
+): Promise<MyPicksOutcome> {
+  let response: Response;
+  try {
+    response = await fetch(`${workerUrl()}/players/picks/${fixtureId}`, {
+      cache: 'no-store',
+      headers: {
+        'x-player-id': session.playerId,
+        'x-player-token': session.playerToken,
+      },
+    });
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+  if (response.status === 401) {
+    return { ok: false, reason: 'auth_failed' };
+  }
+  if (!response.ok) {
+    return { ok: false, reason: 'server' };
+  }
+  try {
+    const payload = (await response.json()) as { picks: MyPickEntry[] };
+    return { ok: true, entries: payload.picks };
+  } catch {
+    return { ok: false, reason: 'server' };
+  }
+}
 
 export type ProfileOutcome =
   | { ok: true; profile: ProfilePayload }

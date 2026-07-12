@@ -2,6 +2,7 @@
 
 import type { CallOption } from '@calledit/contracts';
 import { Button } from '../ui/button';
+import { HoldButton } from '../ui/hold-button';
 import { Eyebrow } from '../ui/eyebrow';
 import { formatClockMinutes, formatPoints, formatProbability } from '../../lib/format';
 
@@ -31,6 +32,7 @@ export function CallCard({
   justLocked,
   enterDelayMs,
   sponsor,
+  isSuggested,
   onLock,
 }: {
   option: CallOption;
@@ -43,6 +45,8 @@ export function CallCard({
   enterDelayMs: number;
   /** Sample brand for the sponsored-call ad unit; undefined on unsponsored calls. */
   sponsor: string | undefined;
+  /** First-visit nudge: quiet "try this one" marker, never a pre-selection. */
+  isSuggested: boolean;
   onLock: (option: CallOption) => void;
 }) {
   const windowEnd = windowEndClockSeconds(option);
@@ -81,9 +85,16 @@ export function CallCard({
               Presented by {sponsor}
             </span>
           ) : null}
-          <Eyebrow size="sm" tone={isClosing ? 'faint' : 'default'}>
-            {option.category}
-          </Eyebrow>
+          <span className="flex items-center gap-2">
+            <Eyebrow size="sm" tone={isClosing ? 'faint' : 'default'}>
+              {option.category}
+            </Eyebrow>
+            {isSuggested && isOffered ? (
+              <span className="rounded-chip bg-accent-soft px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-accent-deep">
+                Try this one
+              </span>
+            ) : null}
+          </span>
           <h3 className={`mb-1 mt-1.5 text-[17px] font-medium tracking-[-0.01em] ${inkClass}`}>
             {option.label}
           </h3>
@@ -118,14 +129,13 @@ export function CallCard({
             </span>
           </span>
           {isOffered ? (
-            <Button
-              variant="primary"
+            <HoldButton
               isLoading={isLocking}
-              onClick={() => onLock(option)}
+              onComplete={() => onLock(option)}
               aria-label={`Lock: ${option.label}`}
             >
-              Lock it
-            </Button>
+              Hold to lock
+            </HoldButton>
           ) : (
             <Button variant="ghost" disabled aria-disabled>
               {locked !== undefined

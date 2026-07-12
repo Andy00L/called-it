@@ -1,4 +1,9 @@
-import type { LockResult, ReplayCreateResult, ReplaySessionInfo } from '@calledit/contracts';
+import type {
+  LockResult,
+  MyPickEntry,
+  ReplayCreateResult,
+  ReplaySessionInfo,
+} from '@calledit/contracts';
 import { workerUrl } from './api';
 
 /**
@@ -119,6 +124,32 @@ export async function fetchReplaySession(
   }
   try {
     return { ok: true, session: (await response.json()) as ReplaySessionInfo };
+  } catch {
+    return { ok: false, reason: 'server' };
+  }
+}
+
+/** The session's picks so far (the reload restore for replay screens). */
+export async function fetchReplayPicks(
+  sessionId: string,
+): Promise<{ ok: true; entries: MyPickEntry[] } | { ok: false; reason: ReplayFailure }> {
+  let response: Response;
+  try {
+    response = await fetch(`${workerUrl()}/replay/sessions/${sessionId}/picks`, {
+      cache: 'no-store',
+    });
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+  if (response.status === 404) {
+    return { ok: false, reason: 'unknown_session' };
+  }
+  if (!response.ok) {
+    return { ok: false, reason: 'server' };
+  }
+  try {
+    const payload = (await response.json()) as { picks: MyPickEntry[] };
+    return { ok: true, entries: payload.picks };
   } catch {
     return { ok: false, reason: 'server' };
   }

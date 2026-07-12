@@ -167,9 +167,20 @@ shareable, provable receipt (links unfurl as thermal-receipt cards).
 | Sponsored call category ("Presented by" on the corner call) | A brand buying a named in-match moment | Attention at the tensest minutes plus a fan action tied to the name | FIFA sells this exact unit at WC2026: the Lay's Chip Challenge prediction game; Michelob ULTRA bought the Player of the Match vote for all 104 matches |
 | The shared receipt and its public page `/r/{pickId}` | The match sponsor, priced as earned media | The sponsor line travels in group chats with every shared win, delivered off-platform by the fan | Sponsor-branded shareable moments (Budweiser's 2022 Player of the Match vote drove 10.8M social actions) |
 
-The demo shows one sample brand (Volt) on all three surfaces. The slot is the
-product, not the logo: every surface a bookmaker cannot legally give a fan,
-a free game can.
+The demo shows one sample brand (Volt) on all three surfaces, and proves the
+slot is productized: `?sponsor=<brand>` on any match, replay, or receipt page
+reskins every surface live. The slot is the product, not the logo: every
+surface a bookmaker cannot legally give a fan, a free game can. Two more
+mechanisms ride the same rails:
+
+- **Sponsor-funded jackpot moments.** The board shows a sample slot ("3 hits
+  in one half enters the draw"); in production a sponsor funds the headline
+  prize and a prize-indemnity insurer carries the tail risk for a fixed
+  premium, the standard structure behind ESPN Streak's $1M grand prize
+  (sponsored by Progressive) and Chalkline's SCA-backed promotions.
+- **Aggregate sentiment data.** The lobby's fans-versus-Bookie line (fans hit
+  X of Y calls in the last 24 hours) is the visible corner of a crowd-vs-market
+  index sponsors and media can buy, aggregate and anonymous only.
 
 ### Why free-to-play is the moat, not the compromise
 
@@ -212,6 +223,13 @@ point, not a constraint:
 - Celebrations fire only on true hits; a miss renders flat and quiet. Slot
   UIs celebrate net losses ("losses disguised as wins", Dixon et al. 2010);
   this product never does.
+- The near miss is printed factually: when a missed window's event lands just
+  late, the toast and the receipt show the feed's own margin ("the corner
+  came 87', window closed 85'"). Slot machines manufacture near-misses on
+  purpose (Reid 1986); this product only ever reports one.
+- Locking is a deliberate press-and-hold, never an accidental tap: personally
+  arranging the call is what makes it rewarding (Clark et al. 2009), and
+  keyboard users keep instant activation.
 - The lock window is a real market constraint rendered calmly: a quiet 2 px
   bar drains with the actual window, no counters, no flashing, no
   manufactured panic (fake urgency is among the most common documented dark

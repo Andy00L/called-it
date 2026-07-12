@@ -423,6 +423,19 @@ body {
   }
 }
 
+/* The LED sponsor board: one continuous loop over a track rendered twice,
+   so -50% lands with no visible jump. Linear is correct for a marquee
+   (playbook 3.1); the global reduced-motion rule freezes it to a static,
+   identical row. */
+@keyframes ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

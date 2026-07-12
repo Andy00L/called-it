@@ -11,10 +11,14 @@ import { useSyncExternalStore } from 'react';
  *   detail callback with { register };
  * - the app dispatches 'wallet-standard:app-ready' carrying { register } so
  *   wallets injected before the app can register too.
- * Features used (sourceRef: wallet-standard connect.ts, anza signMessage.ts):
+ * Features used (sourceRef: wallet-standard connect.ts, anza signMessage.ts
+ * and signAndSendTransaction.ts):
  * - 'standard:connect': connect() resolves { accounts: WalletAccount[] };
  * - 'solana:signMessage': signMessage({ account, message }) resolves
- *   [{ signedMessage, signature }], Ed25519.
+ *   [{ signedMessage, signature }], Ed25519;
+ * - 'solana:signAndSendTransaction': takes the SERIALIZED transaction bytes
+ *   (the wallet deserializes, signs, and submits) and resolves
+ *   [{ signature }], the raw 64-byte transaction signature.
  */
 
 export interface SolanaWalletEntry {
@@ -44,6 +48,15 @@ interface SolanaSignMessageFeature {
     ...inputs: { account: StandardWalletAccount; message: Uint8Array }[]
   ): Promise<readonly { signedMessage: Uint8Array; signature: Uint8Array }[]>;
 }
+
+interface SolanaSignAndSendTransactionFeature {
+  signAndSendTransaction(
+    ...inputs: { account: StandardWalletAccount; transaction: Uint8Array; chain: string }[]
+  ): Promise<readonly { signature: Uint8Array }[]>;
+}
+
+// The product runs mainnet only (docs/TECH_DOC.md, Solana integrations).
+const MAINNET_CHAIN = 'solana:mainnet';
 
 interface StandardWallet {
   name: string;
@@ -103,6 +116,45 @@ export function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(byte);
   }
   return window.btoa(binary);
+}
+
+/** Base64 decode without Buffer (browser): serialized transactions. */
+export function base64ToBytes(base64: string): Uint8Array {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+// sourceRef: the Bitcoin base58 alphabet, as used by Solana signatures.
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+/** Base58 encode without a dependency: tx signatures are 64 bytes. */
+export function bytesToBase58(bytes: Uint8Array): string {
+  let leadingZeroCount = 0;
+  while (leadingZeroCount < bytes.length && bytes[leadingZeroCount] === 0) {
+    leadingZeroCount += 1;
+  }
+  const digits: number[] = [];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let digitIndex = 0; digitIndex < digits.length; digitIndex += 1) {
+      carry += (digits[digitIndex] ?? 0) * 256;
+      digits[digitIndex] = carry % 58;
+      carry = Math.floor(carry / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+  const encoded = digits
+    .reverse()
+    .map((digit) => BASE58_ALPHABET[digit] ?? '')
+    .join('');
+  return '1'.repeat(leadingZeroCount) + encoded;
 }
 
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
@@ -272,4 +324,72 @@ export async function connectAndSignMessage(
     return { ok: false, reason: 'no_wallet' };
   }
   return signWithStandardWallet(wallet, message);
+}
+
+export type WalletPayFailure = WalletSignFailure | 'build_failed';
+
+export type WalletPayOutcome =
+  | { ok: true; walletPubkey: string; signatureBase58: string }
+  | { ok: false; reason: WalletPayFailure };
+
+/**
+ * Connect the chosen wallet, let the caller build the unsigned transaction
+ * for the connected address (the worker does the building), then have the
+ * wallet sign AND submit it. Returns the base58 transaction signature the
+ * worker verifies on-chain. The legacy injection cannot take serialized
+ * bytes, so payments require a Wallet Standard wallet.
+ */
+export async function connectAndSendTransaction(
+  walletId: string,
+  buildTransactionBase64: (payerPubkey: string) => Promise<string | null>,
+): Promise<WalletPayOutcome> {
+  if (walletId === LEGACY_PHANTOM_ID) {
+    return { ok: false, reason: 'unsupported' };
+  }
+  const wallet = standardWalletsByName.get(walletId.replace(/^standard:/, ''));
+  if (wallet === undefined) {
+    return { ok: false, reason: 'no_wallet' };
+  }
+  const payFeatureRaw = wallet.features['solana:signAndSendTransaction'];
+  if (!isRecord(payFeatureRaw) || typeof payFeatureRaw['signAndSendTransaction'] !== 'function') {
+    return { ok: false, reason: 'unsupported' };
+  }
+  const payFeature = wallet.features[
+    'solana:signAndSendTransaction'
+  ] as SolanaSignAndSendTransactionFeature;
+  const connectFeature = wallet.features['standard:connect'] as StandardConnectFeature;
+  let accounts: readonly StandardWalletAccount[];
+  try {
+    accounts = (await connectFeature.connect()).accounts;
+  } catch {
+    return { ok: false, reason: 'rejected' };
+  }
+  const account =
+    accounts.find((candidate) => candidate.chains.includes(MAINNET_CHAIN)) ??
+    accounts.find((candidate) => candidate.chains.some((chain) => chain.startsWith('solana:'))) ??
+    accounts[0];
+  if (account === undefined || typeof account.address !== 'string') {
+    return { ok: false, reason: 'rejected' };
+  }
+  const transactionBase64 = await buildTransactionBase64(account.address);
+  if (transactionBase64 === null) {
+    return { ok: false, reason: 'build_failed' };
+  }
+  try {
+    const [sent] = await payFeature.signAndSendTransaction({
+      account,
+      transaction: base64ToBytes(transactionBase64),
+      chain: MAINNET_CHAIN,
+    });
+    if (sent === undefined) {
+      return { ok: false, reason: 'unsupported' };
+    }
+    return {
+      ok: true,
+      walletPubkey: account.address,
+      signatureBase58: bytesToBase58(sent.signature),
+    };
+  } catch {
+    return { ok: false, reason: 'rejected' };
+  }
 }

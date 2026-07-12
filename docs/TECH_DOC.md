@@ -181,6 +181,14 @@ mechanisms ride the same rails:
 - **Aggregate sentiment data.** The lobby's fans-versus-Bookie line (fans hit
   X of Y calls in the last 24 hours) is the visible corner of a crowd-vs-market
   index sponsors and media can buy, aggregate and anonymous only.
+- **Self-serve board sales, live in the product.** The lobby's LED ticker
+  sells itself: pick a duration and a screen-time tier on `/sponsor`, pay in
+  SOL from any Wallet Standard wallet, and the worker verifies the transfer
+  on-chain (amount, recipient, and an intent-bound memo; the tx signature is
+  single-use) before the name rides the board. Pricing is a public formula
+  (0.01 SOL per day, times the tier, times a demand multiplier that grows
+  with each active sponsor). The whole ad-sales funnel is one wallet
+  signature: no sales team, no invoice, no account.
 
 ### Why free-to-play is the moat, not the compromise
 

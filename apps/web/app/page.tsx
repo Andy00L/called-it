@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { fetchDuelStats, fetchFixtures, fetchReplayTapes } from '../lib/api';
+import { fetchSponsorBoard } from '../lib/sponsor-api';
 import { EmptyState } from '../components/ui/empty-state';
 import { Eyebrow } from '../components/ui/eyebrow';
 import { Card, Tray } from '../components/ui/surface';
@@ -7,6 +8,7 @@ import { buttonClassName } from '../components/ui/button-styles';
 import { LiveFixtureRow, UpcomingFixtureRow } from '../components/lobby/fixture-card';
 import { ReplayTapeRow } from '../components/lobby/replay-row';
 import { DuelLine } from '../components/lobby/duel-line';
+import { SponsorTicker } from '../components/lobby/sponsor-ticker';
 import { HowItWorks } from '../components/onboarding/how-it-works';
 
 function NavCard() {
@@ -47,10 +49,11 @@ function HeroHeader() {
 }
 
 export default async function LobbyPage() {
-  const [fixturesResult, tapesResult, duelResult] = await Promise.all([
+  const [fixturesResult, tapesResult, duelResult, sponsorBoard] = await Promise.all([
     fetchFixtures(),
     fetchReplayTapes(),
     fetchDuelStats(),
+    fetchSponsorBoard(),
   ]);
   const duelStats = duelResult.ok ? duelResult.stats : null;
 
@@ -193,7 +196,9 @@ export default async function LobbyPage() {
         ) : null}
       </div>
 
-      <p className="mt-11 text-center text-xs text-ink-muted">
+      <SponsorTicker sponsors={sponsorBoard} />
+
+      <p className="mt-5 text-center text-xs text-ink-muted">
         runs on TxLINE data, anchored on Solana
       </p>
     </main>

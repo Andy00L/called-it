@@ -6,7 +6,7 @@ import { EmptyState } from '../components/ui/empty-state';
 import { Eyebrow } from '../components/ui/eyebrow';
 import { Tray } from '../components/ui/surface';
 import { buttonClassName } from '../components/ui/button-styles';
-import { TournamentWheel } from '../components/lobby/tournament-wheel';
+import { TournamentWheelBackdrop } from '../components/lobby/tournament-wheel';
 import { ProgrammeRail, type RailEntry } from '../components/lobby/programme-rail';
 import { DuelLine } from '../components/lobby/duel-line';
 import { SponsorTicker } from '../components/lobby/sponsor-ticker';
@@ -33,9 +33,9 @@ function NavCard() {
   );
 }
 
-function HeroHeader() {
+function HeroText() {
   return (
-    <header className="mx-auto mb-14 mt-13 max-w-[760px] text-center">
+    <>
       <Eyebrow>Free live prediction game</Eyebrow>
       <h1 className="mt-4 text-[clamp(36px,4.6vw,52px)] font-medium leading-[1.08] tracking-[-0.03em]">
         Call the match live.
@@ -45,6 +45,15 @@ function HeroHeader() {
       <p className="mt-3.5 text-base text-ink-muted">
         Priced by the market. Settled by the feed. Anchored on-chain.
       </p>
+    </>
+  );
+}
+
+/** Plain hero, no wheel: the feed-down error branch where no teams exist. */
+function HeroHeader() {
+  return (
+    <header className="mx-auto mb-14 mt-13 max-w-[760px] text-center">
+      <HeroText />
     </header>
   );
 }
@@ -175,13 +184,18 @@ export default async function LobbyPage() {
       <div className="mt-4">
         <SponsorTicker sponsors={sponsorBoard} />
       </div>
-      <HeroHeader />
-      {/* Pulls into the hero's bottom margin so the line reads as its coda. */}
-      <DuelLine stats={duelStats} className="-mt-9 mb-14" />
+      {/* The hero rides over the ambient tournament wheel: the wheel is the
+          backdrop behind the title, its own text block is gone, the duel
+          line closes the block. */}
+      <section className="relative mx-auto mb-12 mt-2 max-w-[900px]">
+        <TournamentWheelBackdrop teams={buildWheelTeams(fixturesResult.fixtures, nowMs)} />
+        <div className="relative z-[1] mx-auto max-w-[720px] px-5 pb-1 pt-[132px] text-center">
+          <HeroText />
+          <DuelLine stats={duelStats} className="mt-6" />
+        </div>
+      </section>
 
       <HowItWorks className="mb-5" />
-
-      <TournamentWheel teams={buildWheelTeams(fixturesResult.fixtures, nowMs)} />
 
       {railEntries.length === 0 ? (
         <Tray className="mt-7 p-2">

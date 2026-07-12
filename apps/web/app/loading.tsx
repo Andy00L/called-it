@@ -1,6 +1,6 @@
 import { Skeleton } from '../components/ui/skeleton';
 import { Eyebrow } from '../components/ui/eyebrow';
-import { TournamentWheelSkeleton } from '../components/lobby/tournament-wheel';
+import { TournamentWheelBackdropSkeleton } from '../components/lobby/tournament-wheel';
 
 /** One shelf card skeleton, seated on the rail's arc like the real cards. */
 function RailCardSkeleton({ dropPx, tiltDeg }: { dropPx: number; tiltDeg: number }) {
@@ -30,13 +30,14 @@ export default function LobbyLoading() {
         </div>
       </div>
 
-      <div className="mx-auto mb-14 mt-13 flex max-w-[760px] flex-col items-center gap-4">
-        <Skeleton className="h-2.5 w-44" />
-        <Skeleton className="h-10 w-72" />
-        <Skeleton className="h-3.5 w-80" />
-      </div>
-
-      <TournamentWheelSkeleton />
+      <section className="relative mx-auto mb-12 mt-2 max-w-[900px]">
+        <TournamentWheelBackdropSkeleton />
+        <div className="relative z-[1] mx-auto flex max-w-[720px] flex-col items-center gap-4 px-5 pt-[132px]">
+          <Skeleton className="h-2.5 w-44" />
+          <Skeleton className="h-10 w-72" />
+          <Skeleton className="h-3.5 w-80" />
+        </div>
+      </section>
 
       <div className="mt-7">
         <div className="mx-0.5 mb-2.5 flex items-baseline justify-between gap-3">

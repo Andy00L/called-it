@@ -25,7 +25,7 @@ Experiences track.
 ![app](https://img.shields.io/badge/app-live%20on%20Vercel-2C8C3C)
 ![proof](https://img.shields.io/badge/proof-Merkle%20memo%20on%20Solana-B87514)
 
-![The lobby: the tournament wheel over the programme rail, final scores read from the tapes](docs/screenshots/01-lobby.png)
+![The lobby: the tournament wheel behind the hero title, over the programme rail with final scores read from the tapes](docs/screenshots/01-lobby.png)
 
 | The living pitch: both elevens, benches, live stat badges           | The proof: merkle VALID, oracle VERIFIED, anchored on Solana        |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------- |

@@ -30,6 +30,7 @@ const TEAM_META: Record<string, TeamMeta> = {
   Belgium: { code: 'BEL', iso: 'be' },
   Paraguay: { code: 'PAR', iso: 'py' },
   Norway: { code: 'NOR', iso: 'no' },
+  Morocco: { code: 'MAR', iso: 'ma' },
   Vietnam: { code: 'VIE', iso: 'vn' },
   Myanmar: { code: 'MYA', iso: 'mm' },
   Australia: { code: 'AUS', iso: 'au' },

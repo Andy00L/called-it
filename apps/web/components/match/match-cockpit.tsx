@@ -5,6 +5,7 @@ import type { LivePayload, TeamSquadPayload } from '@calledit/contracts';
 import { Card, Tray } from '../ui/surface';
 import { Eyebrow } from '../ui/eyebrow';
 import { teamTag } from '../../lib/format';
+import { jerseyStyleFor } from '../../lib/squad';
 import { ScoreContent } from './score-card';
 import { PitchView } from './pitch-view';
 import { ActionFlash } from './action-flash';
@@ -150,6 +151,15 @@ export function MatchCockpit({
 
   const xiActive = xiAvailable && xiOn && !pitchReduced;
 
+  // Jersey tint for the momentum ball and halo: only when the feed served a
+  // shirt color, so an old tape keeps the neutral printed ball.
+  const p1Jersey = payload.squads?.p1?.jerseyColor
+    ? jerseyStyleFor(payload.squads.p1.jerseyColor, 'p1')
+    : null;
+  const p2Jersey = payload.squads?.p2?.jerseyColor
+    ? jerseyStyleFor(payload.squads.p2.jerseyColor, 'p2')
+    : null;
+
   return (
     <Tray className="p-2">
       <Card className="overflow-hidden">
@@ -237,6 +247,8 @@ export function MatchCockpit({
                   connectionLost={connectionLost}
                   heroHidden={xiActive}
                   captionOverride={xiActive ? 'Lineups by position group' : undefined}
+                  p1Jersey={p1Jersey}
+                  p2Jersey={p2Jersey}
                 />
                 {xiActive && squads !== null ? (
                   <SquadPitchLayer

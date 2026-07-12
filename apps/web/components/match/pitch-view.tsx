@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { DangerLevel, MatchResultProbabilities, PitchMomentum } from '@calledit/contracts';
 import { favoredSide } from './probability-pulse';
 import { usePrefersReducedMotion } from '../../lib/use-reduced-motion';
+import { isLightJersey, type JerseyStyle } from '../../lib/squad';
 
 /**
  * The pressure pitch (signature element): a printed, top-down pitch that reacts
@@ -164,29 +165,38 @@ function useFreshEvent(lastEvent: PitchEvent | null): PitchEvent | null {
   return fresh;
 }
 
-/** The printed football, authored centered at (0,0), radius 11. */
-function DetailedBall() {
+/**
+ * The printed football, authored centered at (0,0), radius 11. Its base wears
+ * the possessing team's jersey color and its seams the contrast tone, so the
+ * ball reads as "who has it"; the base fill eases between team colors on a
+ * possession switch.
+ */
+function DetailedBall({ baseColor, inkColor }: { baseColor: string; inkColor: string }) {
   return (
     <>
-      <circle r={BALL_AUTHOR_RADIUS} fill="var(--card)" />
+      <circle
+        r={BALL_AUTHOR_RADIUS}
+        fill={baseColor}
+        style={{ transition: 'fill var(--duration-standard) var(--ease-standard)' }}
+      />
       <circle r={BALL_AUTHOR_RADIUS} fill="url(#pitchTopLight)" />
-      <polygon points="0,-3.2 3.04,-0.99 1.88,2.59 -1.88,2.59 -3.04,-0.99" fill="var(--ink)" />
+      <polygon points="0,-3.2 3.04,-0.99 1.88,2.59 -1.88,2.59 -3.04,-0.99" fill={inkColor} />
       <path
         d="M0,-3.2 L0,-10.4 M3.04,-0.99 L9.9,-3.22 M1.88,2.59 L6.1,8.4 M-1.88,2.59 L-6.1,8.4 M-3.04,-0.99 L-9.9,-3.22"
-        stroke="var(--ink)"
+        stroke={inkColor}
         strokeWidth={1}
         fill="none"
         strokeLinecap="round"
       />
       <path
         d="M-2.1,-9.7 L0,-10.6 L2.1,-9.7 M8.7,-5 L9.95,-3.2 L9,-1.1"
-        stroke="var(--ink)"
+        stroke={inkColor}
         strokeWidth={0.8}
         fill="none"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-      <circle r={BALL_AUTHOR_RADIUS} fill="none" stroke="var(--ink)" strokeWidth={1} />
+      <circle r={BALL_AUTHOR_RADIUS} fill="none" stroke={inkColor} strokeWidth={1} />
     </>
   );
 }
@@ -361,6 +371,8 @@ export function PitchView({
   connectionLost = false,
   heroHidden = false,
   captionOverride,
+  p1Jersey = null,
+  p2Jersey = null,
 }: {
   momentum: PitchMomentum;
   matchResult: MatchResultProbabilities | null;
@@ -374,6 +386,9 @@ export function PitchView({
   heroHidden?: boolean;
   /** XI layer active: the caption states the position-group honesty rule. */
   captionOverride?: string;
+  /** Jersey styles for the possessing-team ball/halo tint; null keeps neutral. */
+  p1Jersey?: JerseyStyle | null;
+  p2Jersey?: JerseyStyle | null;
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const ballX = FIELD_LEFT + momentum.ballAdvance * FIELD_WIDTH;
@@ -383,6 +398,23 @@ export function PitchView({
   // A dropped feed freezes the pitch; reduced motion stills it too.
   const still = reducedMotion || connectionLost;
   const moving = motion.isMoving && !still;
+
+  // The ball wears the possessing team's jersey color, and the halo follows.
+  // A light jersey (white, yellow) would vanish on the pale pitch, so the halo
+  // falls back to the accent for those while the ball keeps the real color.
+  // Possession TYPE stays encoded by the halo's size and breathing, unchanged.
+  const possessingJersey =
+    momentum.possessingTeam === 'p1'
+      ? p1Jersey
+      : momentum.possessingTeam === 'p2'
+        ? p2Jersey
+        : null;
+  const ballBase = possessingJersey?.fill ?? 'var(--card)';
+  const ballInk = possessingJersey?.numberColor ?? 'var(--ink)';
+  const haloColor =
+    possessingJersey !== null && !isLightJersey(possessingJersey.fill)
+      ? possessingJersey.fill
+      : 'var(--accent)';
 
   const centerY = reduced ? 32 : 100;
   const ballScale = reduced ? 8 / BALL_AUTHOR_RADIUS : 1;
@@ -470,9 +502,9 @@ export function PitchView({
             <stop offset="100%" stopColor="var(--ink)" stopOpacity={0.06} />
           </radialGradient>
           <radialGradient id="pitchHalo" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.9} />
-            <stop offset="65%" stopColor="var(--accent)" stopOpacity={0.28} />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+            <stop offset="0%" stopColor={haloColor} stopOpacity={0.9} />
+            <stop offset="65%" stopColor={haloColor} stopOpacity={0.28} />
+            <stop offset="100%" stopColor={haloColor} stopOpacity={0} />
           </radialGradient>
           <radialGradient id="pitchBallShadow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="var(--ink)" stopOpacity={0.2} />
@@ -558,7 +590,7 @@ export function PitchView({
           <ellipse cx={0} cy={shadowCy} rx={shadowRx} ry={shadowRy} fill="url(#pitchBallShadow)" style={shadowStyle} />
           <g transform={`scale(${ballScale})`}>
             <g style={rollStyle}>
-              <DetailedBall />
+              <DetailedBall baseColor={ballBase} inkColor={ballInk} />
             </g>
           </g>
         </g>

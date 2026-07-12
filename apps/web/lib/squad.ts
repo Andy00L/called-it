@@ -13,11 +13,28 @@ import type {
  * player identities; it serves no crests, photos, or tactical formations.
  */
 
-interface JerseyStyle {
+export interface JerseyStyle {
   /** Chip fill, a concrete color (chips are printed roundels, not tokens). */
   fill: string;
   /** Number color, chosen for contrast on the fill. */
   numberColor: string;
+}
+
+/**
+ * Perceived-luminance test on a #RRGGBB fill (Rec. 601 weights). A light
+ * jersey (white, yellow) makes a poor pressure-halo hue on the pale pitch,
+ * so the pitch falls its halo back to the accent for those; the ball itself
+ * still wears the real color.
+ */
+export function isLightJersey(fill: string): boolean {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(fill);
+  if (match === null) {
+    return false;
+  }
+  const red = Number.parseInt(match[1] ?? '0', 16);
+  const green = Number.parseInt(match[2] ?? '0', 16);
+  const blue = Number.parseInt(match[3] ?? '0', 16);
+  return (0.299 * red + 0.587 * green + 0.114 * blue) / 255 > 0.7;
 }
 
 // Shirt-color words observed or plausible on the feed, mapped to printed

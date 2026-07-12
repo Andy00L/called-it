@@ -212,9 +212,10 @@ point, not a constraint:
 - Celebrations fire only on true hits; a miss renders flat and quiet. Slot
   UIs celebrate net losses ("losses disguised as wins", Dixon et al. 2010);
   this product never does.
-- The lock window is a real market constraint rendered calmly: no fake
-  countdowns, no manufactured panic (fake urgency is among the most common
-  documented dark patterns, Mathur et al. 2019).
+- The lock window is a real market constraint rendered calmly: a quiet 2 px
+  bar drains with the actual window, no counters, no flashing, no
+  manufactured panic (fake urgency is among the most common documented dark
+  patterns, Mathur et al. 2019).
 - The match bounds the session: half-time and full-time are natural stopping
   points, the inversion of "time on device" design (Schüll 2012).
 - Everyone faces the same market. Selling edge is the fastest documented

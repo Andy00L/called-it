@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { ImageResponse } from 'next/og';
 import type { ReceiptPayload } from '@calledit/contracts';
 import { fetchReceipt, isPickIdShaped } from '../../../lib/api';
+import { SAMPLE_SPONSOR } from '../../../lib/sponsor';
 import {
   formatClockMinutes,
   formatPoints,
@@ -28,6 +29,9 @@ const PAPER = '#f6f3ea';
 const PAPER_INK = '#151515';
 const PAPER_RULE = 'rgba(21, 21, 21, 0.3)';
 const MISS = '#d24141';
+const INK = '#12170f';
+const INK_MUTED = '#67705f';
+const ACCENT = '#2c8c3c';
 // --shadow-receipt scaled 2x: the web ticket is 300px wide, this card is 720.
 const RECEIPT_SHADOW =
   '0 20px 48px rgba(18, 23, 15, 0.14), 0 4px 6px rgba(18, 23, 15, 0.05)';
@@ -82,6 +86,36 @@ function TicketHeader() {
   );
 }
 
+/**
+ * The sponsor line under the ticket (third ad surface, docs/TECH_DOC.md):
+ * the shared card carries the match sponsor into every chat it lands in.
+ */
+function SponsorLine() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        fontSize: 19,
+        letterSpacing: '0.14em',
+        color: INK_MUTED,
+      }}
+    >
+      <span>MATCH PRESENTED BY</span>
+      <span
+        style={{
+          width: 9,
+          height: 9,
+          borderRadius: 999,
+          backgroundColor: ACCENT,
+        }}
+      />
+      <span style={{ fontWeight: 700, color: INK }}>{SAMPLE_SPONSOR.toUpperCase()}</span>
+    </div>
+  );
+}
+
 function ReceiptCard({ receipt }: { receipt: ReceiptPayload }) {
   const { pick, settlement, commitment, proofValid, fixture } = receipt;
   const isAnchored =
@@ -91,7 +125,7 @@ function ReceiptCard({ receipt }: { receipt: ReceiptPayload }) {
   )}${receipt.playerHandle !== null ? ` by ${receipt.playerHandle}` : ''}`;
 
   return (
-    <div style={canvasStyle}>
+    <div style={{ ...canvasStyle, flexDirection: 'column', gap: 26 }}>
       <div style={ticketStyle}>
         <TicketHeader />
         <div style={ruleStyle} />
@@ -130,6 +164,7 @@ function ReceiptCard({ receipt }: { receipt: ReceiptPayload }) {
         <div style={ruleStyle} />
         <div style={footerStyle}>{isAnchored ? 'ANCHORED ON SOLANA' : 'CALLED IT'}</div>
       </div>
+      <SponsorLine />
     </div>
   );
 }

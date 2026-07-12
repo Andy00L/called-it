@@ -50,6 +50,17 @@ export function CallCard({
     locked === undefined && windowEnd !== null && windowEnd - clockSeconds < WINDOW_CLOSING_SECONDS;
   const isOffered = locked === undefined && !isClosing;
   const inkClass = isClosing ? 'text-ink-faint' : 'text-ink';
+  // The window bar drains with the real market window: honest urgency with
+  // no counters and no flashing. Offered event-window calls only; once the
+  // card flips to closing, the ghost button carries the message instead.
+  const windowSpanSeconds =
+    option.predicate.kind === 'event_window'
+      ? option.predicate.toClockSeconds - option.predicate.fromClockSeconds
+      : 0;
+  const windowRemainingFraction =
+    isOffered && windowEnd !== null && windowSpanSeconds > 0
+      ? Math.min(1, Math.max(0, (windowEnd - clockSeconds) / windowSpanSeconds))
+      : null;
 
   return (
     <article
@@ -124,6 +135,14 @@ export function CallCard({
           )}
         </div>
       </div>
+      {windowRemainingFraction !== null ? (
+        <div aria-hidden className="mx-4 -mt-1 mb-3 h-0.5 rounded-full bg-[var(--band-track)] sm:mx-4.5">
+          <div
+            className="h-full origin-left rounded-full bg-accent transition-transform duration-[var(--duration-standard)] ease-[var(--ease-standard)]"
+            style={{ transform: `scaleX(${windowRemainingFraction})` }}
+          />
+        </div>
+      ) : null}
     </article>
   );
 }

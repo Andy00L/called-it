@@ -15,7 +15,14 @@ import type {
   SettlementNotice,
 } from '@calledit/contracts';
 import type { Fixture } from '@calledit/txline';
-import { readTape, tapeFilePath, type TapeDeck, type TapeEntry } from './tape.js';
+import {
+  readTape,
+  readTapeFinalScore,
+  tapeFilePath,
+  type TapeDeck,
+  type TapeEntry,
+} from './tape.js';
+import { readStat } from '@calledit/engine';
 import {
   applyOddsPayload,
   applyScoresUpdate,
@@ -149,6 +156,29 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
   const nowMs = deps.nowMs ?? Date.now;
   const scheduler = deps.scheduler ?? TIMER_SCHEDULER;
   const sessions = new Map<string, ReplaySession>();
+  /** Tail-read final goals per tape, keyed by mtime so a re-append refreshes. */
+  const finalGoalsCache = new Map<
+    number,
+    { mtimeMs: number; goals: { p1: number; p2: number } | null }
+  >();
+
+  const finalGoalsOf = (
+    fixtureId: number,
+    filePath: string,
+    mtimeMs: number,
+  ): { p1: number; p2: number } | null => {
+    const cached = finalGoalsCache.get(fixtureId);
+    if (cached !== undefined && cached.mtimeMs === mtimeMs) {
+      return cached.goals;
+    }
+    const score = readTapeFinalScore(filePath);
+    const goals =
+      score === null
+        ? null
+        : { p1: readStat(score, 'goals', 'p1'), p2: readStat(score, 'goals', 'p2') };
+    finalGoalsCache.set(fixtureId, { mtimeMs, goals });
+    return goals;
+  };
   let sweepTimer: NodeJS.Timeout | null = null;
   // Replay games never link wallets, but the game service requires a verifier;
   // one shared instance satisfies the dependency without any wallet surface.
@@ -357,6 +387,11 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
           continue;
         }
         const fixture = fixturesById.get(fixtureId);
+        const finalGoals = finalGoalsOf(
+          fixtureId,
+          resolve(deps.deck.directory, fileName),
+          updatedAtMs,
+        );
         summaries.push({
           fixtureId,
           competition: fixture?.Competition ?? 'Unknown competition',
@@ -364,6 +399,8 @@ export function createReplayManager(deps: ReplayManagerDeps): ReplayManager {
           participant2: fixture?.Participant2 ?? '',
           sizeBytes,
           updatedAtMs: Math.round(updatedAtMs),
+          finalGoalsP1: finalGoals?.p1 ?? null,
+          finalGoalsP2: finalGoals?.p2 ?? null,
         });
       }
       summaries.sort((left, right) => right.updatedAtMs - left.updatedAtMs);

@@ -39,6 +39,8 @@ export interface SquadPlayerEntry {
   starter: boolean;
   /** Starter flag merged with substitutions and red cards. */
   onPitch: boolean;
+  /** ISO date as served, e.g. "1987-06-24"; null when the feed omits it. */
+  dateOfBirth: string | null;
 }
 
 export interface TeamSquadPayload {
@@ -311,6 +313,9 @@ export interface ReplayTapeSummary {
   sizeBytes: number;
   /** Last tape write, epoch ms; doubles as "when the match ended" roughly. */
   updatedAtMs: number;
+  /** Final goals read from the tape's tail; null when the tape has none. */
+  finalGoalsP1: number | null;
+  finalGoalsP2: number | null;
 }
 
 /** Replay session state, returned by the /replay/sessions endpoints. */

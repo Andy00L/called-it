@@ -359,6 +359,8 @@ export function PitchView({
   phase,
   reduced = false,
   connectionLost = false,
+  heroHidden = false,
+  captionOverride,
 }: {
   momentum: PitchMomentum;
   matchResult: MatchResultProbabilities | null;
@@ -368,6 +370,10 @@ export function PitchView({
   /** Collapsed cockpit: render the slim band instead of the full pitch. */
   reduced?: boolean;
   connectionLost?: boolean;
+  /** XI layer active: the momentum ball rests so the chips own the pitch. */
+  heroHidden?: boolean;
+  /** XI layer active: the caption states the position-group honesty rule. */
+  captionOverride?: string;
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const ballX = FIELD_LEFT + momentum.ballAdvance * FIELD_WIDTH;
@@ -402,7 +408,10 @@ export function PitchView({
     goalEvent !== null
       ? (teamName(goalEvent.team, participant1, participant2) ?? 'A')
       : null;
-  const displayCaption = goalEvent !== null && scorerName !== null ? `${scorerName} goal` : caption;
+  const displayCaption =
+    goalEvent !== null && scorerName !== null
+      ? `${scorerName} goal`
+      : (captionOverride ?? caption);
   const showCelebration = goalEvent !== null && scorerName !== null && !reduced && !still;
 
   const outerStyle: CSSProperties = {
@@ -519,8 +528,9 @@ export function PitchView({
         ) : null}
 
         {/* Momentum: the hot-zone halo, trail, contact shadow, and the rolling
-            printed ball, translated as one group along the pitch. */}
-        <g style={outerStyle}>
+            printed ball, translated as one group along the pitch. Rests while
+            the XI layer owns the pitch (heroHidden). */}
+        <g style={outerStyle} display={heroHidden ? 'none' : undefined}>
           <circle
             cx={0}
             cy={0}

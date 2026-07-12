@@ -66,6 +66,7 @@ export interface StoredSquadPlayer {
   number: string | null;
   positionGroup: SquadPositionGroup;
   starter: boolean;
+  dateOfBirth: string | null;
 }
 
 export interface StoredTeamSquad {
@@ -181,6 +182,7 @@ function parseTeamSquad(entry: LineupTeamEntry): StoredTeamSquad | null {
           ? (POSITION_GROUP_BY_ID[rosterEntry.positionId] ?? 'unknown')
           : 'unknown',
       starter: rosterEntry.starter === true,
+      dateOfBirth: typeof identity.dateOfBirth === 'string' ? identity.dateOfBirth : null,
     });
   }
   return players.length === 0 ? null : { teamName: entry.preferredName, players };

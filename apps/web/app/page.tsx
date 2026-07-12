@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { fetchDuelStats, fetchFixtures, fetchReplayTapes } from '../lib/api';
 import { fetchSponsorBoard } from '../lib/sponsor-api';
+import { buildWheelTeams } from '../lib/teams';
 import { EmptyState } from '../components/ui/empty-state';
 import { Eyebrow } from '../components/ui/eyebrow';
-import { Card, Tray } from '../components/ui/surface';
+import { Tray } from '../components/ui/surface';
 import { buttonClassName } from '../components/ui/button-styles';
-import { LiveFixtureRow, UpcomingFixtureRow } from '../components/lobby/fixture-card';
-import { ReplayTapeRow } from '../components/lobby/replay-row';
+import { TournamentWheel } from '../components/lobby/tournament-wheel';
+import { ProgrammeRail, type RailEntry } from '../components/lobby/programme-rail';
 import { DuelLine } from '../components/lobby/duel-line';
 import { SponsorTicker } from '../components/lobby/sponsor-ticker';
 import { HowItWorks } from '../components/onboarding/how-it-works';
@@ -90,11 +91,16 @@ export default async function LobbyPage() {
   // kickoff so the programme reads top to bottom.
   const isStillToBePlayed = (phase: string, startTimeMs: number): boolean =>
     phase !== 'finished' && startTimeMs + MATCH_MAX_DURATION_MS > nowMs;
+  // The programme covers the coming fortnight; a friendly ten weeks out is
+  // catalog noise, not an edition on the shelf.
+  const RAIL_UPCOMING_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
   const liveFixtures = fixturesResult.fixtures.filter((fixture) => fixture.phase === 'live');
   const upcomingFixtures = fixturesResult.fixtures
     .filter(
       (fixture) =>
-        fixture.phase === 'pre' && isStillToBePlayed(fixture.phase, fixture.startTimeMs),
+        fixture.phase === 'pre' &&
+        isStillToBePlayed(fixture.phase, fixture.startTimeMs) &&
+        fixture.startTimeMs < nowMs + RAIL_UPCOMING_WINDOW_MS,
     )
     .sort((first, second) => first.startTimeMs - second.startTimeMs);
   // Tapes captured before the durable name cache shipped have no team names
@@ -113,6 +119,55 @@ export default async function LobbyPage() {
       )
     : [];
 
+  // The rail reads left to right as the programme does: finished editions
+  // (oldest first), then the live edition popped off the shelf, then the
+  // upcoming ones counting down. Final scores come from the live state when
+  // the worker still holds it; a tape alone never invents one.
+  const fixtureById = new Map(fixturesResult.fixtures.map((fixture) => [fixture.fixtureId, fixture]));
+  const railEntries: RailEntry[] = [
+    ...[...tapes]
+      .sort((first, second) => first.updatedAtMs - second.updatedAtMs)
+      .map((tape) => {
+        const state = fixtureById.get(tape.fixtureId);
+        const liveScore =
+          state !== undefined && state.phase === 'finished'
+            ? { p1: state.goalsP1, p2: state.goalsP2 }
+            : null;
+        // A worker restart wipes live state; the tape's own tail still knows.
+        const tapeScore =
+          tape.finalGoalsP1 !== null && tape.finalGoalsP2 !== null
+            ? { p1: tape.finalGoalsP1, p2: tape.finalGoalsP2 }
+            : null;
+        return {
+          kind: 'replay' as const,
+          fixtureId: tape.fixtureId,
+          participant1: tape.participant1,
+          participant2: tape.participant2,
+          competition: tape.competition,
+          score: liveScore ?? tapeScore,
+        };
+      }),
+    ...liveFixtures.map((fixture) => ({
+      kind: 'live' as const,
+      fixtureId: fixture.fixtureId,
+      participant1: fixture.participant1,
+      participant2: fixture.participant2,
+      goalsP1: fixture.goalsP1,
+      goalsP2: fixture.goalsP2,
+      clockSeconds: fixture.clockSeconds,
+      matchResult: fixture.matchResult,
+    })),
+    ...upcomingFixtures.map((fixture) => ({
+      kind: 'upcoming' as const,
+      fixtureId: fixture.fixtureId,
+      participant1: fixture.participant1,
+      participant2: fixture.participant2,
+      competition: fixture.competition,
+      startTimeMs: fixture.startTimeMs,
+      matchResult: fixture.matchResult,
+    })),
+  ];
+
   return (
     <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
       <NavCard />
@@ -126,79 +181,18 @@ export default async function LobbyPage() {
 
       <HowItWorks className="mb-5" />
 
-      <div className="flex flex-wrap items-start gap-5">
-        <section
-          aria-label="Live now"
-          className="tray min-w-0 flex-[2_1_560px] p-2 [animation:deck-in_var(--duration-standard)_var(--ease-enter)_both]"
-        >
-          <div className="mx-2.5 mb-2 mt-1.5 flex">
-            <Eyebrow>Live now</Eyebrow>
-          </div>
-          {liveFixtures.length === 0 ? (
-            <EmptyState
-              motif="ball"
-              title="No live match right now"
-              action={
-                tapes.length > 0 ? (
-                  <a href="#replay-them" className={buttonClassName('ghost')}>
-                    Replay a finished match
-                  </a>
-                ) : undefined
-              }
-            />
-          ) : (
-            <Card className="overflow-hidden">
-              {liveFixtures.map((fixture, index) => (
-                <div key={fixture.fixtureId} className={index === 0 ? '' : 'rule-dashed'}>
-                  <LiveFixtureRow fixture={fixture} />
-                </div>
-              ))}
-            </Card>
-          )}
-        </section>
+      <TournamentWheel teams={buildWheelTeams(fixturesResult.fixtures, nowMs)} />
 
-        <section
-          aria-label="Up next"
-          className="tray min-w-0 flex-[1_1_300px] p-2 [animation:deck-in_var(--duration-standard)_var(--ease-enter)_40ms_both]"
-        >
+      {railEntries.length === 0 ? (
+        <Tray className="mt-7 p-2">
           <div className="mx-2.5 mb-2 mt-1.5 flex">
-            <Eyebrow>Up next</Eyebrow>
+            <Eyebrow>The programme</Eyebrow>
           </div>
-          {upcomingFixtures.length === 0 ? (
-            <EmptyState motif="flag" title="No kickoff scheduled in the window" />
-          ) : (
-            <Card>
-              {upcomingFixtures.map((fixture, index) => (
-                <div key={fixture.fixtureId} className={index === 0 ? '' : 'rule-dashed'}>
-                  <UpcomingFixtureRow fixture={fixture} />
-                </div>
-              ))}
-            </Card>
-          )}
-        </section>
-
-        {tapes.length > 0 ? (
-          <section
-            id="replay-them"
-            aria-label="Replay them"
-            className="tray flex-[1_1_100%] p-2 [animation:deck-in_var(--duration-standard)_var(--ease-enter)_80ms_both]"
-          >
-            <div className="mx-2.5 mb-2 mt-1.5 flex">
-              <Eyebrow>Replay them</Eyebrow>
-            </div>
-            <Card className="overflow-hidden">
-              {tapes.map((tape, index) => (
-                <div key={tape.fixtureId} className={index === 0 ? '' : 'rule-dashed'}>
-                  <ReplayTapeRow tape={tape} />
-                </div>
-              ))}
-              <div className="rule-dashed px-4 py-3 sm:px-4.5">
-                <span className="text-xs text-ink-muted">Play it back at 10x</span>
-              </div>
-            </Card>
-          </section>
-        ) : null}
-      </div>
+          <EmptyState motif="ball" title="No matches in the window yet" />
+        </Tray>
+      ) : (
+        <ProgrammeRail entries={railEntries} />
+      )}
 
       <p className="mt-11 text-center text-xs text-ink-muted">
         runs on TxLINE data, anchored on Solana{' '}

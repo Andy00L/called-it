@@ -1,8 +1,24 @@
 import { Skeleton } from '../components/ui/skeleton';
-import { Card, Tray } from '../components/ui/surface';
 import { Eyebrow } from '../components/ui/eyebrow';
+import { TournamentWheelSkeleton } from '../components/lobby/tournament-wheel';
 
-/** Lobby loading state: skeleton rows mirroring the three sections. */
+/** One shelf card skeleton, seated on the rail's arc like the real cards. */
+function RailCardSkeleton({ dropPx, tiltDeg }: { dropPx: number; tiltDeg: number }) {
+  return (
+    <div className="flex min-w-[240px] flex-[1_1_240px]">
+      <div
+        className="flex min-h-[150px] flex-1 flex-col rounded-card border border-hairline bg-card p-4"
+        style={{ transform: `translateY(${dropPx}px) rotate(${tiltDeg}deg)` }}
+      >
+        <Skeleton className="h-3.5 w-16" />
+        <Skeleton className="mt-auto h-3 w-30" />
+        <Skeleton className="mt-2 h-2 w-20" />
+      </div>
+    </div>
+  );
+}
+
+/** Lobby loading state: skeletons mirroring the wheel and the programme rail. */
 export default function LobbyLoading() {
   return (
     <main aria-busy className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
@@ -20,58 +36,21 @@ export default function LobbyLoading() {
         <Skeleton className="h-3.5 w-80" />
       </div>
 
-      <div className="flex flex-wrap items-start gap-5">
-        <Tray className="min-w-0 flex-[2_1_560px] p-2">
-          <div className="mx-2.5 mb-2 mt-1.5 flex">
-            <Eyebrow>Live now</Eyebrow>
-          </div>
-          <Card>
-            {[0, 1].map((row) => (
-              <div key={row} className={`p-4 sm:px-4.5 ${row === 0 ? '' : 'rule-dashed'}`}>
-                <div className="flex justify-between gap-4">
-                  <div className="flex flex-1 flex-col gap-2">
-                    <Skeleton className="h-2 w-30" />
-                    <Skeleton className="h-4 w-47" />
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <Skeleton className="h-4 w-18" />
-                    <Skeleton className="h-4.5 w-12" />
-                  </div>
-                </div>
-                <Skeleton className="mt-3.5 h-0.5 w-full rounded-[2px]" />
-              </div>
-            ))}
-          </Card>
-        </Tray>
+      <TournamentWheelSkeleton />
 
-        <Tray className="min-w-0 flex-[1_1_300px] p-2">
-          <div className="mx-2.5 mb-2 mt-1.5 flex">
-            <Eyebrow>Up next</Eyebrow>
+      <div className="mt-7">
+        <div className="mx-0.5 mb-2.5 flex items-baseline justify-between gap-3">
+          <Eyebrow>The programme</Eyebrow>
+          <Skeleton className="h-3 w-16" />
+        </div>
+        <div className="tray px-4 pb-4 pt-6">
+          <div className="flex items-stretch gap-3.5 overflow-hidden px-0.5 pb-4">
+            <RailCardSkeleton dropPx={0} tiltDeg={2.5} />
+            <RailCardSkeleton dropPx={12} tiltDeg={1} />
+            <RailCardSkeleton dropPx={12} tiltDeg={-1} />
+            <RailCardSkeleton dropPx={0} tiltDeg={-2.5} />
           </div>
-          <Card>
-            {[0, 1].map((row) => (
-              <div
-                key={row}
-                className={`flex items-center justify-between gap-3.5 px-4 py-4 ${row === 0 ? '' : 'rule-dashed'}`}
-              >
-                <Skeleton className="h-3.5 w-37" />
-                <Skeleton className="h-3 w-11" />
-              </div>
-            ))}
-          </Card>
-        </Tray>
-
-        <Tray className="flex-[1_1_100%] p-2">
-          <div className="mx-2.5 mb-2 mt-1.5 flex">
-            <Eyebrow>Replay them</Eyebrow>
-          </div>
-          <Card>
-            <div className="flex items-center justify-between gap-3.5 px-4 py-4 sm:px-4.5">
-              <Skeleton className="h-3.5 w-40" />
-              <Skeleton className="h-4 w-16" />
-            </div>
-          </Card>
-        </Tray>
+        </div>
       </div>
     </main>
   );

@@ -114,6 +114,15 @@ body {
   border-top: 1px dashed var(--hairline);
 }
 
+/* The programme rail scrolls with snap and gestures; the bar itself would
+   read as chrome on the shelf. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /*
  * Receipt perforation (signature element 2, sheet): punched semicircles
  * showing the cream page through the paper edge, like a thermal ticket.
@@ -420,6 +429,65 @@ body {
   100% {
     opacity: 0;
     transform: translate(-50%, -50%) scale(1.03) rotate(-3deg);
+  }
+}
+
+/* The tournament wheel: a continuous slow rotation (linear is correct for a
+   continuous spin, playbook 3.1) behind a one-time settle; the global
+   reduced-motion rule freezes both to a static wheel. */
+@keyframes wheel-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes wheel-settle {
+  from {
+    transform: rotate(6deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+/* The live edition pops off the programme shelf, after the rail settles. */
+@keyframes live-pop {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-8px);
+  }
+}
+/* Player card entrances: side panel on desktop, bottom sheet on mobile. */
+@keyframes player-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* A substituted-in chip lands with one accent ring pulse. */
+@keyframes ring-pulse {
+  0% {
+    box-shadow: 0 0 0 2px rgba(44, 140, 60, 0.9);
+  }
+  100% {
+    box-shadow: 0 0 0 2px rgba(44, 140, 60, 0);
   }
 }
 

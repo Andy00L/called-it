@@ -1,6 +1,6 @@
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { err, ok, type Result } from '@calledit/txline';
+import { err, ok, type Result, type SoccerFixtureScore } from '@calledit/txline';
 
 /**
  * Tapes: one append-only NDJSON file per fixture, every payload the worker
@@ -87,6 +87,65 @@ export function readTape(filePath: string): Result<TapeReadResult, string> {
     entries.push(parsed);
   }
   return ok({ entries, skippedLineCount });
+}
+
+// Final scores live at the tape's end (game_finalised, then a short tail of
+// post-match odds ticks); this window covers that tail without reading a
+// 30MB tape per lobby request.
+const FINAL_SCORE_TAIL_BYTES = 256 * 1024;
+
+/**
+ * The final cumulative Score of a finished tape, read from the file's tail:
+ * the game_finalised record when the window holds one, else the last
+ * Score-bearing scores record. Null when the tail carries no score (a
+ * pre-match stub, or a truncated recording).
+ */
+export function readTapeFinalScore(filePath: string): SoccerFixtureScore | null {
+  let raw: string;
+  try {
+    const sizeBytes = statSync(filePath).size;
+    const readFrom = Math.max(0, sizeBytes - FINAL_SCORE_TAIL_BYTES);
+    const buffer = Buffer.alloc(sizeBytes - readFrom);
+    const fileHandle = openSync(filePath, 'r');
+    try {
+      readSync(fileHandle, buffer, 0, buffer.length, readFrom);
+    } finally {
+      closeSync(fileHandle);
+    }
+    raw = buffer.toString('utf8');
+  } catch {
+    return null;
+  }
+  const lines = raw.split('\n');
+  // A mid-file start tears the first line; drop it unless we read the whole file.
+  const firstWholeLine = raw.length < FINAL_SCORE_TAIL_BYTES ? 0 : 1;
+  let lastScore: SoccerFixtureScore | null = null;
+  for (let index = lines.length - 1; index >= firstWholeLine; index -= 1) {
+    const line = lines[index];
+    if (line === undefined || line === '') {
+      continue;
+    }
+    const entry = parseTapeLine(line);
+    if (entry === null || entry.stream !== 'scores') {
+      continue;
+    }
+    const payload = entry.payload;
+    if (typeof payload !== 'object' || payload === null) {
+      continue;
+    }
+    const record = payload as { Action?: unknown; Score?: unknown };
+    if (typeof record.Score !== 'object' || record.Score === null) {
+      continue;
+    }
+    const score = record.Score as SoccerFixtureScore;
+    if (record.Action === 'game_finalised') {
+      return score;
+    }
+    if (lastScore === null) {
+      lastScore = score;
+    }
+  }
+  return lastScore;
 }
 
 function parseTapeLine(line: string): TapeEntry | null {

@@ -3,7 +3,13 @@ import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { appendTapeEntry, openTapeDeck, readTape, tapeFilePath } from './tape.js';
+import {
+  appendTapeEntry,
+  openTapeDeck,
+  readTape,
+  readTapeFinalScore,
+  tapeFilePath,
+} from './tape.js';
 
 const scratchDirectory = mkdtempSync(join(tmpdir(), 'calledit-tape-'));
 
@@ -68,4 +74,56 @@ test('readTape skips torn and foreign lines instead of failing', () => {
 test('readTape reports a missing file as an error value', () => {
   const readResult = readTape(join(scratchDirectory, 'does-not-exist.ndjson'));
   assert.equal(readResult.ok, false);
+});
+
+test('readTapeFinalScore prefers game_finalised over later odds ticks', () => {
+  const deckResult = openTapeDeck(join(scratchDirectory, 'deck-d'));
+  assert.ok(deckResult.ok);
+  const deck = deckResult.value;
+
+  appendTapeEntry(deck, 77, {
+    receivedAtMs: 1,
+    stream: 'scores',
+    payload: {
+      FixtureId: 77,
+      Action: 'goal',
+      Score: { Participant1: { Total: { Goals: 1 } } },
+    },
+  });
+  appendTapeEntry(deck, 77, {
+    receivedAtMs: 2,
+    stream: 'scores',
+    payload: {
+      FixtureId: 77,
+      Action: 'game_finalised',
+      Score: {
+        Participant1: { Total: { Goals: 3 } },
+        Participant2: { Total: { Goals: 1 } },
+      },
+    },
+  });
+  // Post-match odds ticks after the whistle must not hide the final.
+  appendTapeEntry(deck, 77, {
+    receivedAtMs: 3,
+    stream: 'odds',
+    payload: { FixtureId: 77, SuperOddsType: '1X2_PARTICIPANT_RESULT' },
+  });
+
+  const score = readTapeFinalScore(tapeFilePath(deck, 77));
+  assert.ok(score !== null);
+  assert.equal(score.Participant1?.Total?.Goals, 3);
+  assert.equal(score.Participant2?.Total?.Goals, 1);
+});
+
+test('readTapeFinalScore is null for a scoreless (pre-match) tape', () => {
+  const deckResult = openTapeDeck(join(scratchDirectory, 'deck-e'));
+  assert.ok(deckResult.ok);
+  const deck = deckResult.value;
+  appendTapeEntry(deck, 78, {
+    receivedAtMs: 1,
+    stream: 'odds',
+    payload: { FixtureId: 78, SuperOddsType: '1X2_PARTICIPANT_RESULT' },
+  });
+  assert.equal(readTapeFinalScore(tapeFilePath(deck, 78)), null);
+  assert.equal(readTapeFinalScore(join(scratchDirectory, 'absent.ndjson')), null);
 });

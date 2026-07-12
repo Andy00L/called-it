@@ -88,6 +88,35 @@ export interface ReceiptRecord {
 export const PERSISTENCE_ERROR_DUPLICATE_CATEGORY = 'duplicate_category';
 export const PERSISTENCE_ERROR_NOT_PENDING = 'not_pending';
 export const PERSISTENCE_ERROR_WALLET_TAKEN = 'wallet_taken';
+export const PERSISTENCE_ERROR_TX_USED = 'tx_already_used';
+
+/** One self-serve sponsorship (sponsors table, 0004_sponsors.sql). */
+export interface SponsorRecord {
+  id: string;
+  name: string;
+  tagline: string | null;
+  /** Screen-time tier, 1 to 3 (ticker loop repetitions). */
+  weight: number;
+  days: number;
+  quoteLamports: number;
+  status: 'pending' | 'active';
+  payerPubkey: string | null;
+  txSig: string | null;
+  paidLamports: number | null;
+  createdAtMs: number;
+  startsAtMs: number | null;
+  endsAtMs: number | null;
+}
+
+/** Activation write: the verified payment attached to a pending intent. */
+export interface SponsorActivationInput {
+  id: string;
+  txSig: string;
+  payerPubkey: string;
+  paidLamports: number;
+  startsAtMs: number;
+  endsAtMs: number;
+}
 
 export interface PersistencePort {
   describeBackend(): string;
@@ -139,4 +168,12 @@ export interface PersistencePort {
   recordNearMiss(pickId: string, nearMissSeconds: number): Promise<Result<void, string>>;
   /** Fans-versus-Bookie counters over picks locked since the given time. */
   duelStats(sinceMs: number): Promise<Result<DuelStats, string>>;
+  /** Reserve a priced sponsorship intent (status pending). */
+  createSponsorIntent(record: SponsorRecord): Promise<Result<void, string>>;
+  getSponsor(sponsorId: string): Promise<Result<SponsorRecord | null, string>>;
+  /** Flip a pending intent to active with its verified payment; the tx
+   *  signature is unique across sponsorships (`tx_already_used`). */
+  activateSponsor(input: SponsorActivationInput): Promise<Result<void, string>>;
+  /** Active sponsorships whose window covers nowMs, heaviest first. */
+  listActiveSponsors(nowMs: number): Promise<Result<SponsorRecord[], string>>;
 }

@@ -27,6 +27,8 @@ import { createFixtureCatalog, summarizeFixtures } from './fixtures.js';
 import { readWorkerEnv } from './env.js';
 import { createGameService, NEAR_MISS_HORIZON_SECONDS, type GameService } from './game.js';
 import { findNearMissEvent } from '@calledit/engine';
+import { createSponsorService, type SponsorService } from './sponsors.js';
+import { createSponsorPayments } from './sponsor-payments.js';
 import { createMemoryPersistence } from './persistence-memory.js';
 import { createSupabasePersistence } from './persistence-supabase.js';
 import { createWalletVerifier } from './wallet-auth.js';
@@ -86,11 +88,41 @@ function statusForReplayError(code: string): number {
   return statusForGameError(code);
 }
 
+/** Sponsorship error codes onto HTTP statuses (distinct per failure mode). */
+function statusForSponsorError(code: string): number {
+  if (code === 'unknown_intent') {
+    return 404;
+  }
+  if (
+    code === 'intent_expired' ||
+    code === 'already_active' ||
+    code === 'tx_already_used' ||
+    code === 'payment_pending' ||
+    code === 'payment_too_small' ||
+    code === 'memo_mismatch' ||
+    code === 'tx_failed'
+  ) {
+    return 409;
+  }
+  if (code === 'sponsorship_off') {
+    return 503;
+  }
+  if (code.startsWith('invalid_')) {
+    return 400;
+  }
+  return 500;
+}
+
 interface ReceiptSource {
   buildReceipt(pickId: string): Promise<Result<ReceiptPayload | null, string>>;
 }
 
-function buildApiHandler(game: GameService, receipts: ReceiptSource, replay: ReplayManager) {
+function buildApiHandler(
+  game: GameService,
+  receipts: ReceiptSource,
+  replay: ReplayManager,
+  sponsors: SponsorService,
+) {
   return async (
     method: string,
     segments: string[],
@@ -201,6 +233,51 @@ function buildApiHandler(game: GameService, receipts: ReceiptSource, replay: Rep
         return { status: statusForGameError(myPicks.error), body: { error: myPicks.error } };
       }
       return { status: 200, body: { picks: myPicks.value } };
+    }
+
+    if (segments[0] === 'sponsors') {
+      if (method === 'GET' && segments.length === 2 && segments[1] === 'active') {
+        const board = await sponsors.board();
+        if (!board.ok) {
+          return { status: 500, body: { error: board.error } };
+        }
+        return { status: 200, body: { sponsors: board.value } };
+      }
+      if (method === 'POST' && segments.length === 2 && segments[1] === 'preview') {
+        const record = asRecord(body);
+        const preview = await sponsors.preview(record['days'], record['weight']);
+        if (!preview.ok) {
+          return { status: statusForSponsorError(preview.error), body: { error: preview.error } };
+        }
+        return { status: 200, body: preview.value };
+      }
+      if (method === 'POST' && segments.length === 2 && segments[1] === 'quote') {
+        const record = asRecord(body);
+        const quote = await sponsors.requestQuote(
+          record['name'],
+          record['tagline'],
+          record['days'],
+          record['weight'],
+        );
+        if (!quote.ok) {
+          return { status: statusForSponsorError(quote.error), body: { error: quote.error } };
+        }
+        return { status: 200, body: quote.value };
+      }
+      if (method === 'POST' && segments.length === 3 && segments[2] === 'transaction') {
+        const built = await sponsors.buildTransaction(segments[1] ?? '', asRecord(body)['payerPubkey']);
+        if (!built.ok) {
+          return { status: statusForSponsorError(built.error), body: { error: built.error } };
+        }
+        return { status: 200, body: built.value };
+      }
+      if (method === 'POST' && segments.length === 3 && segments[2] === 'confirm') {
+        const confirmed = await sponsors.confirm(segments[1] ?? '', asRecord(body)['signature']);
+        if (!confirmed.ok) {
+          return { status: statusForSponsorError(confirmed.error), body: { error: confirmed.error } };
+        }
+        return { status: 200, body: confirmed.value };
+      }
     }
 
     if (method === 'GET' && segments.length === 2 && segments[0] === 'stats' && segments[1] === 'duel') {
@@ -449,6 +526,15 @@ async function main(): Promise<void> {
   }
   const commitmentBatcher = createCommitmentBatcher({ persistence, postMemo });
 
+  // Self-serve sponsorships pay the server wallet; without a wallet the
+  // routes answer sponsorship_off instead of half-working.
+  const sponsorPayments =
+    env.walletSecret === undefined ? null : createSponsorPayments(env.rpcUrl, env.walletSecret);
+  if (sponsorPayments === null) {
+    console.warn('[main] no wallet configured: self-serve sponsorship is OFF');
+  }
+  const sponsorService = createSponsorService({ persistence, payments: sponsorPayments });
+
   // Time Machine: replays run on private stores and in-memory persistence;
   // fanout callbacks resolve at call time, after fanout exists below.
   const replayManager = createReplayManager({
@@ -482,7 +568,7 @@ async function main(): Promise<void> {
     }),
     hasReplaySession: (sessionId) => replayManager.hasSession(sessionId),
     buildReplayPayload: (sessionId) => replayManager.buildPayload(sessionId),
-    handleApiRequest: buildApiHandler(game, { buildReceipt }, replayManager),
+    handleApiRequest: buildApiHandler(game, { buildReceipt }, replayManager, sponsorService),
   });
 
   await game.hydratePendingPicks();

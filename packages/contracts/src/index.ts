@@ -149,6 +149,46 @@ export interface DuelStats {
   bookieHits: number;
 }
 
+/** One name on the sponsor board ticker (GET /sponsors/active). */
+export interface SponsorBoardEntry {
+  name: string;
+  tagline: string | null;
+  /** Screen-time tier (1 to 3): rides the ticker loop that many times. */
+  weight: number;
+  endsAtMs: number;
+}
+
+/** POST /sponsors/preview response: live price for a duration and tier. */
+export interface SponsorPricePreview {
+  amountLamports: number;
+  days: number;
+  weight: number;
+  activeSponsorCount: number;
+  /** Base rate the formula starts from, shown for transparent pricing. */
+  baseLamportsPerDay: number;
+}
+
+/** POST /sponsors/quote response: a payable intent, priced and reserved. */
+export interface SponsorQuote {
+  intentId: string;
+  amountLamports: number;
+  /** Base58 address the payment must reach (the game's server wallet). */
+  recipient: string;
+  expiresAtMs: number;
+}
+
+/** POST /sponsors/:id/transaction response: unsigned transfer to sign. */
+export interface SponsorTransactionPayload {
+  transactionBase64: string;
+}
+
+/** POST /sponsors/:id/confirm response: the sponsorship is on the board. */
+export interface SponsorActivation {
+  name: string;
+  weight: number;
+  endsAtMs: number;
+}
+
 /** One row of GET /leaderboard. */
 export interface LeaderboardEntry {
   playerId: string;

@@ -2,6 +2,7 @@ import { err, ok } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_TX_USED,
   PERSISTENCE_ERROR_WALLET_TAKEN,
   type CommitmentRecord,
   type FixtureLeaderboardEntry,
@@ -11,6 +12,7 @@ import {
   type PlayerRecord,
   type SettledPickView,
   type SettlementInput,
+  type SponsorRecord,
 } from './persistence.js';
 import type { MerkleProofStep } from '@calledit/contracts';
 
@@ -39,6 +41,7 @@ export function createMemoryPersistence(): PersistencePort {
   const settlements = new Map<string, SettlementRow>();
   const commitments = new Map<string, CommitmentRecord>();
   const commitmentLinksByPickId = new Map<string, PickCommitmentLink>();
+  const sponsors = new Map<string, SponsorRecord>();
 
   const hasPendingInCategory = (candidate: PickRecord): boolean => {
     for (const existing of picks.values()) {
@@ -304,6 +307,51 @@ export function createMemoryPersistence(): PersistencePort {
       settlement.nearMissSeconds = nearMissSeconds;
       return ok(undefined);
     },
+
+    createSponsorIntent: async (record) => {
+      sponsors.set(record.id, { ...record });
+      return ok(undefined);
+    },
+
+    getSponsor: async (sponsorId) => {
+      const record = sponsors.get(sponsorId);
+      return ok(record === undefined ? null : { ...record });
+    },
+
+    activateSponsor: async (input) => {
+      const record = sponsors.get(input.id);
+      if (record === undefined || record.status !== 'pending') {
+        return err(`${PERSISTENCE_ERROR_NOT_PENDING}: sponsor ${input.id}`);
+      }
+      for (const other of sponsors.values()) {
+        if (other.id !== input.id && other.txSig === input.txSig) {
+          return err(`${PERSISTENCE_ERROR_TX_USED}: ${input.txSig}`);
+        }
+      }
+      record.status = 'active';
+      record.txSig = input.txSig;
+      record.payerPubkey = input.payerPubkey;
+      record.paidLamports = input.paidLamports;
+      record.startsAtMs = input.startsAtMs;
+      record.endsAtMs = input.endsAtMs;
+      return ok(undefined);
+    },
+
+    listActiveSponsors: async (nowMs) =>
+      ok(
+        [...sponsors.values()]
+          .filter(
+            (record) =>
+              record.status === 'active' &&
+              record.endsAtMs !== null &&
+              record.endsAtMs > nowMs,
+          )
+          .sort(
+            (left, right) =>
+              right.weight - left.weight || (left.endsAtMs ?? 0) - (right.endsAtMs ?? 0),
+          )
+          .map((record) => ({ ...record })),
+      ),
 
     duelStats: async (sinceMs) => {
       const stats = {

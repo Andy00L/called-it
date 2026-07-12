@@ -4,6 +4,7 @@ import { err, ok, type Result } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_TX_USED,
   PERSISTENCE_ERROR_WALLET_TAKEN,
   type CommitmentRecord,
   type FixtureLeaderboardEntry,
@@ -14,6 +15,7 @@ import {
   type PlayerRecord,
   type SettledPickView,
   type SettlementInput,
+  type SponsorRecord,
 } from './persistence.js';
 
 /**
@@ -62,6 +64,41 @@ interface CommitmentRow {
   memo_tx_sig: string | null;
   pick_count: number;
   created_at: string;
+}
+
+/** sponsors table row (sourceRef: db/migrations/0004_sponsors.sql). */
+interface SponsorRow {
+  id: string;
+  name: string;
+  tagline: string | null;
+  weight: number;
+  days: number;
+  quote_lamports: number;
+  status: 'pending' | 'active';
+  payer_pubkey: string | null;
+  tx_sig: string | null;
+  paid_lamports: number | null;
+  created_at: string;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+
+function sponsorFromRow(row: SponsorRow): SponsorRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    tagline: row.tagline,
+    weight: row.weight,
+    days: row.days,
+    quoteLamports: Number(row.quote_lamports),
+    status: row.status,
+    payerPubkey: row.payer_pubkey,
+    txSig: row.tx_sig,
+    paidLamports: row.paid_lamports === null ? null : Number(row.paid_lamports),
+    createdAtMs: Date.parse(row.created_at),
+    startsAtMs: row.starts_at === null ? null : Date.parse(row.starts_at),
+    endsAtMs: row.ends_at === null ? null : Date.parse(row.ends_at),
+  };
 }
 
 function commitmentFromRow(row: CommitmentRow): CommitmentRecord {
@@ -540,6 +577,77 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
         return err(`near miss update failed (run 0003_near_miss.sql?): ${error.message}`);
       }
       return ok(undefined);
+    },
+
+    createSponsorIntent: async (record) => {
+      const { error } = await client.from('sponsors').insert({
+        id: record.id,
+        name: record.name,
+        tagline: record.tagline,
+        weight: record.weight,
+        days: record.days,
+        quote_lamports: record.quoteLamports,
+        status: record.status,
+        created_at: new Date(record.createdAtMs).toISOString(),
+      });
+      if (error !== null) {
+        return err(`sponsor intent insert failed: ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
+    getSponsor: async (sponsorId) => {
+      const { data, error } = await client
+        .from('sponsors')
+        .select('*')
+        .eq('id', sponsorId)
+        .maybeSingle();
+      if (error !== null) {
+        return err(`sponsor select failed: ${error.message}`);
+      }
+      return ok(data === null ? null : sponsorFromRow(data as SponsorRow));
+    },
+
+    activateSponsor: async (input) => {
+      // The status guard makes the flip single-shot; the unique index on
+      // tx_sig (0004) refuses a payment already spent on another intent.
+      const { data, error } = await client
+        .from('sponsors')
+        .update({
+          status: 'active',
+          tx_sig: input.txSig,
+          payer_pubkey: input.payerPubkey,
+          paid_lamports: input.paidLamports,
+          starts_at: new Date(input.startsAtMs).toISOString(),
+          ends_at: new Date(input.endsAtMs).toISOString(),
+        })
+        .eq('id', input.id)
+        .eq('status', 'pending')
+        .select('id');
+      if (error !== null) {
+        if (error.code === POSTGRES_UNIQUE_VIOLATION) {
+          return err(`${PERSISTENCE_ERROR_TX_USED}: ${input.txSig}`);
+        }
+        return err(`sponsor activate failed: ${error.message}`);
+      }
+      if ((data ?? []).length === 0) {
+        return err(`${PERSISTENCE_ERROR_NOT_PENDING}: sponsor ${input.id}`);
+      }
+      return ok(undefined);
+    },
+
+    listActiveSponsors: async (nowMs) => {
+      const { data, error } = await client
+        .from('sponsors')
+        .select('*')
+        .eq('status', 'active')
+        .gt('ends_at', new Date(nowMs).toISOString())
+        .order('weight', { ascending: false })
+        .order('ends_at', { ascending: true });
+      if (error !== null) {
+        return err(`active sponsors select failed: ${error.message}`);
+      }
+      return ok(((data ?? []) as SponsorRow[]).map(sponsorFromRow));
     },
 
     duelStats: async (sinceMs) => {

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card } from '../ui/surface';
 import { Eyebrow } from '../ui/eyebrow';
 
 /**
@@ -123,16 +122,16 @@ export function HowItWorks({ className = '' }: { className?: string }) {
   return (
     <section
       aria-label="How it works"
-      className={`[animation:deck-in_var(--duration-standard)_var(--ease-enter)_both] ${className}`}
+      className={`gilt-frame [animation:deck-in_var(--duration-standard)_var(--ease-enter)_both] ${className}`}
     >
-      <Card className="px-4 pb-4 pt-3 sm:px-5">
+      <div className="gilt-plate-deep px-5 pb-6 pt-4 sm:px-7">
         <div className="flex items-center justify-between gap-3">
           <Eyebrow>How it works</Eyebrow>
           <button
             type="button"
             onClick={dismissForever}
             aria-label="Dismiss how it works"
-            className="-mr-2 inline-flex size-11 items-center justify-center text-ink-muted transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97]"
+            className="-mr-2 inline-flex size-11 items-center justify-center text-ink-muted transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] hover:text-ink active:scale-[0.97]"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
               <path
@@ -144,7 +143,7 @@ export function HowItWorks({ className = '' }: { className?: string }) {
             </svg>
           </button>
         </div>
-        <ol className="mt-2 grid gap-3.5 sm:grid-cols-3 sm:gap-0">
+        <ol className="mt-3 grid gap-4 sm:grid-cols-3 sm:gap-0">
           {STEPS.map((step, index) => {
             const Picto = step.picto;
             return (
@@ -152,29 +151,29 @@ export function HowItWorks({ className = '' }: { className?: string }) {
                 key={step.title}
                 className={
                   index === 0
-                    ? 'sm:pr-4'
-                    : 'border-dashed border-hairline max-sm:border-t max-sm:pt-3.5 sm:border-l sm:px-4 last:sm:pr-0'
+                    ? 'sm:pr-6'
+                    : 'border-dashed border-hairline max-sm:border-t max-sm:pt-4 sm:border-l sm:px-6 last:sm:pr-0'
                 }
               >
-                <div className="flex items-start gap-3">
-                  <span className="flex size-9 flex-none items-center justify-center rounded-chip bg-accent-soft">
+                <div className="flex items-start gap-3.5">
+                  <span className="gilt-icon-box flex size-10 flex-none items-center justify-center rounded-card">
                     <Picto />
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-ink">
+                    <p className="text-[15px] font-semibold text-ink">
                       <span className="tabular mr-1.5 font-mono text-[11px] font-normal text-ink-faint">
                         {index + 1}
                       </span>
                       {step.title}
                     </p>
-                    <p className="mt-1 text-[13px] leading-normal text-ink-muted">{step.body}</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.body}</p>
                   </div>
                 </div>
               </li>
             );
           })}
         </ol>
-      </Card>
+      </div>
     </section>
   );
 }

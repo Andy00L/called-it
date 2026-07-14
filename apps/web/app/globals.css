@@ -28,6 +28,8 @@
   --paper: #f6f3ea;
   --paper-ink: #151515;
   --paper-rule: rgba(21, 21, 21, 0.3);
+  /* Dark plate role (LED sponsor board): the ink plate on the light skin. */
+  --plate: var(--ink);
 
   /* motion tokens (sheet): durations ms, easing family, stagger 40ms */
   --duration-micro: 70ms;
@@ -84,6 +86,246 @@ body {
   background-color: var(--cream);
   color: var(--ink);
   font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * Broadcast night: the lobby skin (sheet, "Broadcast night" section).
+ * The lobby remaps the palette roles to the accepted broadcast export while
+ * inner screens keep the printed programme. Gold is the accent, stadium blue
+ * is reserved (the bowl and the Solana proof line), green is reserved for
+ * live status and market bars.
+ */
+.broadcast {
+  --cream: #0a130c;
+  --soft: #101b12;
+  --card: #1d242e;
+  --ink: #f3efe2;
+  --ink-muted: #b9ad90;
+  --ink-faint: #8f9a86;
+  --accent: #d9bc6a;
+  --accent-deep: #e8cf87;
+  --accent-soft: rgba(217, 188, 106, 0.12);
+  --accent-line: rgba(217, 188, 106, 0.4);
+  --hairline: rgba(217, 188, 106, 0.26);
+  --skeleton-deep: #1c2620;
+  --plate: #10151b;
+  --tray-inset: inset 0 0 6px 0 rgba(0, 0, 0, 0.5);
+
+  /* broadcast-only roles */
+  --bc-blue: #6db1ff;
+  --bc-bowl-ring: rgba(102, 178, 255, 0.42);
+  --bc-bowl-line: rgba(130, 195, 255, 0.28);
+  --bc-live: #58d68d;
+  --bc-live-dim: #9fd0a4;
+  --bc-live-deep: #2f9e57;
+  --bc-slot-mid: #39414b;
+  --bc-slot-low: #2b323a;
+  --bc-card-hi: #232a33;
+  --bc-card-lo: #141a21;
+  --bc-gilt-line: #8a6d2f;
+  --bc-btn-line: #6f5a2a;
+  --bc-bronze-hi: #241b10;
+  --bc-bronze-lo: #171108;
+  color: var(--ink);
+}
+
+/* The night pitch field: floodlit green with mowing stripes and a vignette. */
+.broadcast-field {
+  background:
+    radial-gradient(1300px 640px at 50% -120px, rgba(46, 102, 58, 0.38), transparent 62%),
+    radial-gradient(150% 110% at 50% 42%, transparent 52%, rgba(0, 0, 0, 0.6) 100%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.022) 0 90px, rgba(0, 0, 0, 0.08) 90px 180px),
+    repeating-linear-gradient(115deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(65deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 6px),
+    radial-gradient(700px 320px at 20% 80%, rgba(22, 54, 30, 0.5), transparent 70%),
+    radial-gradient(780px 340px at 82% 28%, rgba(26, 62, 36, 0.42), transparent 70%),
+    linear-gradient(180deg, #0c1d11 0%, #08130a 45%, #050b06 100%);
+}
+
+/* Gilded picture frame: the broadcast panel border (2.5px brushed gold). */
+.gilt-frame {
+  border-radius: var(--radius-tray);
+  padding: 2.5px;
+  background: linear-gradient(
+    100deg,
+    #6b4f16,
+    #d9bc6a 24%,
+    #7a5c1c 52%,
+    #e8cf87 78%,
+    #6b4f16
+  );
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 0 44px rgba(212, 175, 55, 0.1);
+}
+
+/* Bronze plate: the nav bar and the "How it works" interior. */
+.gilt-plate {
+  background: linear-gradient(180deg, #2b241a 0%, #17110a 55%, #100b06 100%);
+  border: 1px solid var(--bc-gilt-line);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 14px 34px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(243, 220, 146, 0.22),
+    0 0 26px rgba(212, 175, 55, 0.08);
+}
+.gilt-plate-deep {
+  /* nested radius: frame 16 minus the 2.5px gilt padding */
+  border-radius: 13px;
+  background: linear-gradient(180deg, var(--bc-bronze-hi) 0%, var(--bc-bronze-lo) 100%);
+}
+
+/* Bronze push button (nav links). */
+.gilt-btn {
+  background: linear-gradient(180deg, #3a332a, #201a12);
+  border: 1px solid var(--bc-btn-line);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.gilt-btn:hover {
+  background: linear-gradient(180deg, #4a4133, #2a2318);
+  border-color: #a8873f;
+}
+
+/* Bronze icon box inside the "How it works" plate. */
+.gilt-icon-box {
+  background: linear-gradient(180deg, #2c2213, #1a1409);
+  border: 1px solid #7a5c1c;
+  box-shadow: inset 0 1px 0 rgba(243, 220, 146, 0.2);
+}
+
+/* Broadcast slate card: the programme shelf edition. */
+.bc-card {
+  background: linear-gradient(180deg, var(--bc-card-hi), var(--bc-card-lo));
+  border: 1.5px solid var(--bc-gilt-line);
+  border-radius: var(--radius-card);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+}
+/* The live edition pops off the shelf: gold border and glow. */
+.bc-card-pop {
+  border: 2px solid var(--accent);
+  box-shadow:
+    0 0 34px rgba(217, 188, 106, 0.35),
+    0 24px 46px rgba(0, 0, 0, 0.65);
+}
+
+/* The stadium bowl (hero backdrop): wireframe ellipse rings over the pitch. */
+.bowl-ring-outer {
+  border-radius: 50%;
+  border: 2px solid var(--bc-bowl-ring);
+  box-shadow:
+    0 0 34px rgba(80, 160, 255, 0.28),
+    inset 0 0 70px rgba(80, 160, 255, 0.12);
+  animation: bowl-pulse 5s var(--ease-standard) infinite;
+}
+.bowl-ring-dashed {
+  border-radius: 50%;
+  border: 1.5px dashed rgba(150, 205, 255, 0.34);
+}
+.bowl-ring-inner {
+  border-radius: 50%;
+  border: 1px solid rgba(120, 190, 255, 0.26);
+}
+.bowl-glow-arc {
+  border-radius: 50%;
+  border-top: 3px solid rgba(170, 215, 255, 0.5);
+  filter: blur(3px);
+  mask-image: linear-gradient(180deg, #000 0 30%, transparent 55%);
+}
+.bowl-grid {
+  border-radius: 50%;
+  opacity: 0.45;
+  background:
+    repeating-linear-gradient(90deg, var(--bc-bowl-line) 0 1.5px, transparent 1.5px 30px),
+    repeating-linear-gradient(0deg, rgba(130, 195, 255, 0.2) 0 1.5px, transparent 1.5px 26px);
+  mask-image: radial-gradient(closest-side, rgba(0, 0, 0, 0.9), transparent 78%);
+}
+.bowl-ring-gilt {
+  border-radius: 50%;
+  border: 1.5px solid rgba(217, 188, 106, 0.5);
+  box-shadow:
+    0 0 26px rgba(212, 175, 55, 0.2),
+    inset 0 0 30px rgba(212, 175, 55, 0.08);
+}
+.bowl-center-glow {
+  background: radial-gradient(closest-side, rgba(24, 64, 34, 0.55), transparent 72%);
+}
+.bowl-circuit-left {
+  background: linear-gradient(90deg, transparent, rgba(90, 170, 255, 0.55));
+  box-shadow: 0 0 10px rgba(90, 170, 255, 0.4);
+}
+.bowl-circuit-right {
+  background: linear-gradient(270deg, transparent, rgba(230, 200, 110, 0.5));
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.35);
+}
+
+/* The trophy plinth: the gold halo ellipse under the hero trophy. */
+.trophy-plinth {
+  border-radius: 50%;
+  border: 1.5px solid rgba(217, 188, 106, 0.55);
+  box-shadow:
+    0 0 30px rgba(212, 175, 55, 0.28),
+    inset 0 0 24px rgba(212, 175, 55, 0.14);
+}
+
+/* The programme shelf interior: floodlit stand behind the cards. */
+.bc-pitch {
+  /* nested radius: frame 16 minus the 2.5px gilt padding */
+  border-radius: 13px;
+  background:
+    radial-gradient(900px 300px at 50% 115%, rgba(46, 102, 58, 0.45), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0 70px, rgba(0, 0, 0, 0.05) 70px 140px),
+    repeating-linear-gradient(115deg, rgba(0, 0, 0, 0.04) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg, #102015 0%, #0a130c 60%, #08100a 100%);
+}
+.flood-bank {
+  border-radius: 4px;
+  background-image: radial-gradient(circle, rgba(255, 255, 246, 0.95) 1.6px, transparent 2.4px);
+  background-size: 12px 8px;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 230, 0.8));
+  animation: flood-flicker 3.4s var(--ease-standard) infinite;
+}
+.crowd-band {
+  background-image: radial-gradient(circle, rgba(210, 220, 215, 0.15) 1px, transparent 1.6px);
+  background-size: 7px 6px;
+  mask-image: linear-gradient(180deg, #000 40%, transparent);
+}
+.flood-cone {
+  background: linear-gradient(180deg, rgba(255, 255, 235, 0.09), transparent 80%);
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+}
+.flood-wash {
+  background:
+    radial-gradient(420px 260px at 16% 0%, rgba(255, 255, 235, 0.075), transparent 70%),
+    radial-gradient(420px 260px at 40% 0%, rgba(255, 255, 235, 0.06), transparent 70%),
+    radial-gradient(420px 260px at 62% 0%, rgba(255, 255, 235, 0.06), transparent 70%),
+    radial-gradient(420px 260px at 86% 0%, rgba(255, 255, 235, 0.075), transparent 70%);
+}
+.stage-floor-shadow {
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(18, 38, 24, 0.85), transparent 76%);
+}
+.stage-floor-ring {
+  border-radius: 50%;
+  border: 2px solid rgba(230, 200, 110, 0.42);
+  box-shadow:
+    0 0 34px rgba(212, 175, 55, 0.35),
+    inset 0 0 26px rgba(212, 175, 55, 0.18);
+  mask-image: linear-gradient(180deg, transparent 0 32%, #000 58%);
+}
+.stage-floor-ring-inner {
+  border-radius: 50%;
+  border: 1.5px solid rgba(243, 220, 146, 0.3);
+  mask-image: linear-gradient(180deg, transparent 0 30%, #000 60%);
+}
+
+/* The hero headline carries the stadium light (broadcast skin only). */
+.bc-title {
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
+}
+.bc-blue-glow {
+  text-shadow: 0 0 34px rgba(109, 177, 255, 0.45);
 }
 
 /* one focus treatment, everywhere (sheet, a11y floor) */
@@ -432,23 +674,59 @@ body {
   }
 }
 
-/* The tournament wheel: a continuous slow rotation (linear is correct for a
-   continuous spin, playbook 3.1) behind a one-time settle; the global
-   reduced-motion rule freezes both to a static wheel. */
-@keyframes wheel-spin {
+/* The stadium bowl: team badges ride the ellipse rim on a continuous orbit
+   (linear is correct for a continuous orbit, playbook 3.1). The run class is
+   gated on no-preference so reduced motion holds each badge at its inline
+   static offset-distance instead of collapsing the ring to one point. */
+@keyframes bowl-orbit {
   from {
-    transform: rotate(0deg);
+    offset-distance: 0%;
   }
   to {
-    transform: rotate(360deg);
+    offset-distance: 100%;
   }
 }
-@keyframes wheel-settle {
-  from {
-    transform: rotate(6deg);
+/* Badges dim while riding the bottom arc so they never fight the headline
+   or the trophy (0% of the path is top-center, 50% is bottom-center). */
+@keyframes bowl-dim {
+  0%,
+  18% {
+    opacity: 1;
   }
-  to {
-    transform: rotate(0deg);
+  30%,
+  70% {
+    opacity: 0.12;
+  }
+  82%,
+  100% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bowl-orbit-run {
+    animation:
+      bowl-orbit 90s linear infinite,
+      bowl-dim 90s linear infinite;
+  }
+}
+/* Floodlight banks breathe (ambient, long cycle). */
+@keyframes flood-flicker {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* The outer bowl ring pulses slowly. */
+@keyframes bowl-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
   }
 }
 /* The live edition pops off the programme shelf, after the rail settles. */
@@ -457,7 +735,7 @@ body {
     transform: translateY(0);
   }
   to {
-    transform: translateY(-8px);
+    transform: translateY(-18px);
   }
 }
 /* Player card entrances: side panel on desktop, bottom sheet on mobile. */

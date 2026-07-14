@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { MatchResultProbabilities } from '@calledit/contracts';
@@ -10,22 +10,18 @@ import { createReplaySession, REPLAY_FAILURE_COPY } from '../../lib/replay-api';
 import { formatClockMmSs } from '../../lib/format';
 
 /**
- * The programme rail (lobby): one horizontal shelf of match editions riding
- * a dashed arc, the wheel's counter-arc. Finished editions carry the replay
- * stamp, the live edition pops off the shelf on the ink plate, upcoming
- * editions count down with the real pre-match 1X2 teaser. Cards re-seat on
- * the arc as the shelf scrolls (transform only, rAF-throttled).
+ * The programme shelf (broadcast lobby skin): match editions on a floodlit
+ * stage inside a gilded frame. Finished editions carry the replay stamp, the
+ * live edition pops off the shelf with the gold border, upcoming editions
+ * count down with the real pre-match 1X2 teaser. The shelf scrolls sideways
+ * (native snap scroll, plus mouse drag on desktop).
  */
-
-// Arc geometry from the accepted export: a flat-ish circle of radius 5200
-// sampled around the row center, 14px of base drop, clamped at +-560px.
-const ARC_RADIUS = 5200;
-const ARC_BASE_DROP = 14;
-const ARC_CLAMP_PX = 560;
-const RAD_TO_DEG = 57.2958;
 
 // The lobby promise ("Play it back at 10x"): rail sessions start at 10x.
 const DEFAULT_REPLAY_SPEED = 10;
+
+// Mouse travel in px before a shelf drag suppresses the click underneath.
+const DRAG_CLICK_THRESHOLD_PX = 6;
 
 export interface RailReplayEntry {
   kind: 'replay';
@@ -92,14 +88,15 @@ function teaserPercents(matchResult: MatchResultProbabilities): [number, number,
   ];
 }
 
-function FlagPair({ p1, p2, onInk = false }: { p1: string; p2: string; onInk?: boolean }) {
-  const overlapRing = onInk
-    ? '[box-shadow:0_0_0_1.5px_var(--ink)]'
-    : '[box-shadow:0_0_0_1.5px_var(--card)]';
+function FlagPair({ p1, p2 }: { p1: string; p2: string }) {
   return (
     <span aria-hidden className="flex flex-none">
-      <FlagRoundel teamName={p1} size={20} className={overlapRing} />
-      <FlagRoundel teamName={p2} size={20} className={`-ml-1.5 ${overlapRing}`} />
+      <FlagRoundel teamName={p1} size={20} className="[box-shadow:0_0_0_1.5px_var(--bc-card-hi)]" />
+      <FlagRoundel
+        teamName={p2}
+        size={20}
+        className="-ml-1.5 [box-shadow:0_0_0_1.5px_var(--bc-card-hi)]"
+      />
     </span>
   );
 }
@@ -108,12 +105,21 @@ function TeaserBar({ percents }: { percents: [number, number, number] }) {
   const [p1, draw, p2] = percents;
   return (
     <>
-      <span aria-hidden className="flex h-[3px] overflow-hidden rounded-[2px]">
-        <span className="block bg-accent" style={{ flexGrow: p1, flexBasis: 0 }} />
-        <span className="block bg-pulse-mid" style={{ flexGrow: draw, flexBasis: 0 }} />
-        <span className="block bg-pulse-low" style={{ flexGrow: p2, flexBasis: 0 }} />
+      <span aria-hidden className="flex h-[5px] gap-[3px]">
+        <span
+          className="block rounded-full bg-[linear-gradient(90deg,var(--bc-live-deep),var(--bc-live))] [box-shadow:0_0_8px_rgba(88,214,141,0.7)]"
+          style={{ flexGrow: p1, flexBasis: 0 }}
+        />
+        <span
+          className="block rounded-full bg-[var(--bc-slot-mid)]"
+          style={{ flexGrow: draw, flexBasis: 0 }}
+        />
+        <span
+          className="block rounded-full bg-[var(--bc-slot-low)]"
+          style={{ flexGrow: p2, flexBasis: 0 }}
+        />
       </span>
-      <span className="tabular mt-1.5 block font-mono text-[10px] text-ink-muted">
+      <span className="tabular mt-2 block font-mono text-[11px] text-ink-muted">
         {p1} / {draw} / {p2}
       </span>
     </>
@@ -121,7 +127,7 @@ function TeaserBar({ percents }: { percents: [number, number, number] }) {
 }
 
 const CARD_BASE_CLASSES =
-  'flex min-h-[150px] flex-1 flex-col rounded-card border border-hairline bg-card p-4 text-left text-ink no-underline transition-transform duration-[var(--duration-small)] ease-[var(--ease-standard)] hover:-translate-y-0.5 active:scale-[0.97]';
+  'bc-card flex min-h-[164px] w-[250px] flex-none flex-col p-4 text-left text-ink no-underline transition-transform duration-[var(--duration-small)] ease-[var(--ease-standard)] hover:-translate-y-1 hover:border-[var(--accent)] active:scale-[0.97]';
 
 function ReplayCard({ entry }: { entry: RailReplayEntry }) {
   const router = useRouter();
@@ -154,13 +160,13 @@ function ReplayCard({ entry }: { entry: RailReplayEntry }) {
       className={`${CARD_BASE_CLASSES} cursor-pointer disabled:cursor-wait`}
     >
       <div className="flex items-start justify-between gap-2.5">
-        <span className="inline-block -rotate-[4deg] rounded-chip border border-dashed border-[var(--streak-line)] bg-[var(--streak-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-streak">
+        <span className="tabular inline-block rounded-chip border border-dashed border-[var(--accent-line)] bg-accent-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-accent-deep">
           Final edition
         </span>
         <FlagPair p1={entry.participant1} p2={entry.participant2} />
       </div>
       <div className="mt-auto">
-        <p className="m-0 text-[15px] font-medium tracking-[-0.01em]">
+        <p className="m-0 text-[15px] font-semibold tracking-[-0.01em]">
           {entry.participant1}{' '}
           {entry.score !== null ? (
             <span className="tabular font-mono text-[17px] font-semibold">
@@ -171,7 +177,7 @@ function ReplayCard({ entry }: { entry: RailReplayEntry }) {
           )}{' '}
           {entry.participant2}
         </p>
-        <span className="mt-1 block text-xs text-ink-muted">
+        <span className="tabular mt-1.5 block font-mono text-xs text-ink-muted">
           {entry.competition} &middot; {isStarting ? 'starting the replay...' : 'replay as live'}
         </span>
         {startError !== null ? (
@@ -189,34 +195,37 @@ function LiveCard({ entry }: { entry: RailLiveEntry }) {
   const p1Code = entry.participant1.slice(0, 3).toUpperCase();
   const p2Code = entry.participant2.slice(0, 3).toUpperCase();
   return (
-    <div className="flex flex-1 [animation:live-pop_var(--duration-small)_var(--ease-enter)_640ms_both]">
+    <div className="flex flex-none [animation:live-pop_var(--duration-small)_var(--ease-enter)_640ms_both]">
       <Link
         href={`/match/${entry.fixtureId}`}
         aria-label={`Live, ${entry.participant1} ${entry.goalsP1}-${entry.goalsP2} ${entry.participant2}`}
-        className="flex min-h-[150px] flex-1 flex-col gap-2 rounded-card bg-ink p-4 text-cream no-underline transition-transform duration-[var(--duration-small)] ease-[var(--ease-standard)] [box-shadow:0_2px_3px_rgba(18,23,15,0.15),0_14px_20px_rgba(18,23,15,0.2)] hover:-translate-y-0.5 active:scale-[0.97]"
+        className="bc-card bc-card-pop flex min-h-[164px] w-[290px] flex-col gap-2.5 p-4 text-ink no-underline transition-transform duration-[var(--duration-small)] ease-[var(--ease-standard)] hover:-translate-y-1 active:scale-[0.97]"
       >
         <div className="flex items-center justify-between gap-2.5">
-          <span className="tabular inline-flex items-center gap-1.5 font-mono text-[11px] font-medium tracking-[0.14em] text-[#3FBF54]">
+          <span className="tabular inline-flex items-center gap-1.5 rounded-full border border-[rgba(127,224,160,0.5)] bg-[rgba(8,12,10,0.75)] px-2.5 py-0.5 font-mono text-[10px] font-medium tracking-[0.14em] text-[var(--bc-live-dim)]">
             <span
               aria-hidden
-              className="size-1.5 rounded-full bg-[#3FBF54] [animation:dot-pulse_1.6s_var(--ease-standard)_infinite]"
+              className="size-1.5 rounded-full bg-[var(--bc-live)] [box-shadow:0_0_8px_rgba(88,214,141,0.9)] [animation:dot-pulse_1.6s_var(--ease-standard)_infinite]"
             />
             LIVE {formatClockMmSs(entry.clockSeconds)}
           </span>
-          <FlagPair p1={entry.participant1} p2={entry.participant2} onInk />
+          <FlagPair p1={entry.participant1} p2={entry.participant2} />
         </div>
-        <span className="tabular font-mono text-[19px] font-semibold text-cream">
+        <span className="tabular font-mono text-[20px] font-semibold text-white">
           {p1Code} {entry.goalsP1}-{entry.goalsP2} {p2Code}
         </span>
         {percents !== null ? (
-          <span aria-hidden className="mt-auto flex h-0.5 overflow-hidden rounded-[2px]">
-            <span className="block bg-[#3FBF54]" style={{ flexGrow: percents[0], flexBasis: 0 }} />
+          <span aria-hidden className="mt-auto flex h-[3px] gap-[2px]">
             <span
-              className="block bg-pulse-mid opacity-50"
+              className="block rounded-full bg-[var(--bc-live)]"
+              style={{ flexGrow: percents[0], flexBasis: 0 }}
+            />
+            <span
+              className="block rounded-full bg-[var(--bc-slot-mid)]"
               style={{ flexGrow: percents[1], flexBasis: 0 }}
             />
             <span
-              className="block bg-pulse-low opacity-50"
+              className="block rounded-full bg-[var(--bc-slot-low)]"
               style={{ flexGrow: percents[2], flexBasis: 0 }}
             />
           </span>
@@ -224,12 +233,10 @@ function LiveCard({ entry }: { entry: RailLiveEntry }) {
           <span className="mt-auto" />
         )}
         <div className="flex items-baseline justify-between gap-2.5">
-          <span className="tabular font-mono text-[11px] text-ink-faint">tap to call it</span>
+          <span className="tabular font-mono text-[11px] text-ink-muted">tap to call it</span>
           {percents !== null ? (
-            <span className="tabular font-mono text-[11px] text-ink-faint">
-              <span className="text-[#3FBF54]">
-                {p1Code} {percents[0]}%
-              </span>
+            <span className="tabular font-mono text-[11px] text-[var(--bc-live-dim)]">
+              {p1Code} {percents[0]}%
             </span>
           ) : null}
         </div>
@@ -240,32 +247,38 @@ function LiveCard({ entry }: { entry: RailLiveEntry }) {
 
 function UpcomingCard({ entry, nowMs }: { entry: RailUpcomingEntry; nowMs: number }) {
   const percents = entry.matchResult === null ? null : teaserPercents(entry.matchResult);
+  const isImminent = entry.startTimeMs <= nowMs;
   return (
     <Link
       href={`/match/${entry.fixtureId}`}
       aria-label={`${entry.participant1} vs ${entry.participant2}, ${countdownText(entry.startTimeMs, nowMs)}`}
-      className={CARD_BASE_CLASSES}
+      className={`${CARD_BASE_CLASSES} w-[262px]`}
     >
       <div className="flex items-start justify-between gap-2.5">
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-          <span aria-hidden className="text-[8px] text-accent">
-            &#9656;
+        <span className="tabular inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-muted">
+          <span aria-hidden className="text-accent">
+            &middot;
           </span>
           <span suppressHydrationWarning>{kickoffDayLabel(entry.startTimeMs)}</span> &middot;{' '}
           {entry.competition}
-          <span aria-hidden className="text-[8px] text-accent">
-            &#9666;
+          <span aria-hidden className="text-accent">
+            &middot;
           </span>
         </span>
         <FlagPair p1={entry.participant1} p2={entry.participant2} />
       </div>
-      <p className="m-0 mt-2 text-sm font-medium tracking-[-0.01em]">
+      <p className="m-0 mt-2.5 text-[16px] font-semibold tracking-[-0.01em]">
         {entry.participant1} vs {entry.participant2}
       </p>
-      <span className="tabular mt-1 block font-mono text-[11px] text-ink-muted" suppressHydrationWarning>
+      <span
+        className={`tabular mt-1 block font-mono text-[11px] ${
+          isImminent ? 'text-[var(--bc-live-dim)]' : 'text-ink-muted'
+        }`}
+        suppressHydrationWarning
+      >
         {countdownText(entry.startTimeMs, nowMs)}
       </span>
-      <div className="mt-auto pt-2">
+      <div className="mt-auto pt-3">
         {percents !== null ? (
           <TeaserBar percents={percents} />
         ) : (
@@ -278,9 +291,41 @@ function UpcomingCard({ entry, nowMs }: { entry: RailUpcomingEntry; nowMs: numbe
   );
 }
 
+/** Floodlight banks and the crowd band along the top of the shelf. */
+function ShelfLights() {
+  return (
+    <div aria-hidden className="pointer-events-none">
+      <div className="absolute inset-x-0 top-3 flex justify-around px-[8%] max-sm:hidden">
+        <div className="flood-bank h-6 w-24" />
+        <div className="flood-bank h-6 w-24 [animation-duration:3.8s]" />
+        <div className="flood-bank h-6 w-24 [animation-duration:3s]" />
+        <div className="flood-bank h-6 w-24 [animation-duration:4.1s]" />
+      </div>
+      <div className="crowd-band absolute inset-x-0 top-0 h-[54px]" />
+      <div className="flood-cone absolute left-[9%] top-8 h-60 w-[210px] max-sm:hidden" />
+      <div className="flood-cone absolute right-[9%] top-8 h-60 w-[210px] max-sm:hidden" />
+      <div className="flood-wash absolute inset-0" />
+    </div>
+  );
+}
+
+/** The stage floor: layered gold ellipses the popped edition stands on. */
+function StageFloor() {
+  return (
+    <div aria-hidden className="pointer-events-none">
+      <div className="stage-floor-shadow absolute bottom-5 left-1/2 h-[70px] w-[840px] max-w-none -translate-x-1/2" />
+      <div className="stage-floor-ring absolute bottom-[26px] left-1/2 h-14 w-[760px] max-w-none -translate-x-1/2" />
+      <div className="stage-floor-ring-inner absolute bottom-[33px] left-1/2 h-9 w-[560px] max-w-none -translate-x-1/2" />
+    </div>
+  );
+}
+
 export function ProgrammeRail({ entries }: { entries: RailEntry[] }) {
   const rowRef = useRef<HTMLDivElement | null>(null);
-  const frameRef = useRef<number>(0);
+  const dragRef = useRef<{ startX: number; startScrollLeft: number; didDrag: boolean } | null>(
+    null,
+  );
+  const [isDragging, setIsDragging] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Countdown labels tick once a minute; the digits swap, nothing animates.
@@ -289,48 +334,60 @@ export function ProgrammeRail({ entries }: { entries: RailEntry[] }) {
     return () => clearInterval(timer);
   }, []);
 
-  const applyArc = useCallback(() => {
-    const row = rowRef.current;
-    if (row === null) {
-      return;
-    }
-    const midX = row.clientWidth / 2;
-    for (const wrapper of row.querySelectorAll<HTMLElement>('[data-arc]')) {
-      const seat = wrapper.firstElementChild;
-      if (!(seat instanceof HTMLElement)) {
-        continue;
-      }
-      const centerX = wrapper.offsetLeft + wrapper.offsetWidth / 2 - row.scrollLeft;
-      const deltaX = Math.max(-ARC_CLAMP_PX, Math.min(ARC_CLAMP_PX, centerX - midX));
-      const dropPx = ARC_BASE_DROP - (deltaX * deltaX) / (2 * ARC_RADIUS);
-      const tiltDeg = -(deltaX / ARC_RADIUS) * RAD_TO_DEG;
-      seat.style.transform = `translateY(${dropPx.toFixed(1)}px) rotate(${tiltDeg.toFixed(2)}deg)`;
-    }
-  }, []);
-
+  // Center the live (or first upcoming) edition on load. The scroll waits a
+  // frame so it lands after layout settles and snap keeps the seat.
   useEffect(() => {
     const row = rowRef.current;
     if (row === null) {
       return;
     }
-    const scheduleArc = (): void => {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = requestAnimationFrame(applyArc);
-    };
-    row.addEventListener('scroll', scheduleArc, { passive: true });
-    window.addEventListener('resize', scheduleArc);
-    // Center the live (or first upcoming) edition on load, then seat the arc.
-    const focus = row.querySelector<HTMLElement>('[data-rail-focus]');
-    if (focus !== null) {
-      row.scrollLeft = focus.offsetLeft + focus.offsetWidth / 2 - row.clientWidth / 2;
+    const frame = requestAnimationFrame(() => {
+      const focus = row.querySelector<HTMLElement>('[data-rail-focus]');
+      if (focus !== null) {
+        row.scrollLeft = focus.offsetLeft + focus.offsetWidth / 2 - row.clientWidth / 2;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [entries.length]);
+
+  // Mouse drag scrolls the shelf; touch and trackpad already scroll natively.
+  const handleShelfPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.pointerType !== 'mouse' || event.button !== 0 || rowRef.current === null) {
+      return;
     }
-    scheduleArc();
-    return () => {
-      row.removeEventListener('scroll', scheduleArc);
-      window.removeEventListener('resize', scheduleArc);
-      cancelAnimationFrame(frameRef.current);
+    dragRef.current = {
+      startX: event.clientX,
+      startScrollLeft: rowRef.current.scrollLeft,
+      didDrag: false,
     };
-  }, [applyArc, entries.length]);
+    setIsDragging(true);
+  };
+  const handleShelfPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const drag = dragRef.current;
+    const row = rowRef.current;
+    if (drag === null || row === null) {
+      return;
+    }
+    const deltaX = event.clientX - drag.startX;
+    if (Math.abs(deltaX) > DRAG_CLICK_THRESHOLD_PX) {
+      drag.didDrag = true;
+    }
+    row.scrollLeft = drag.startScrollLeft - deltaX;
+  };
+  const handleShelfPointerEnd = (): void => {
+    setIsDragging(false);
+    // didDrag survives until the click fires so the guard below can read it.
+    if (dragRef.current !== null && !dragRef.current.didDrag) {
+      dragRef.current = null;
+    }
+  };
+  const suppressClickAfterDrag = (event: React.MouseEvent<HTMLDivElement>): void => {
+    if (dragRef.current?.didDrag === true) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    dragRef.current = null;
+  };
 
   const focusIndex = (() => {
     const liveIndex = entries.findIndex((entry) => entry.kind === 'live');
@@ -342,62 +399,55 @@ export function ProgrammeRail({ entries }: { entries: RailEntry[] }) {
   })();
 
   return (
-    <section aria-label="The programme rail" id="programme-rail" className="mt-7">
-      <div className="mx-0.5 mb-2.5 flex items-baseline justify-between gap-3">
+    <section aria-label="The programme rail" id="programme-rail" className="mt-10">
+      <div className="mx-0.5 mb-3 flex items-baseline justify-between gap-3">
         <Eyebrow>The programme</Eyebrow>
-        <span className="tabular font-mono text-[11px] text-ink-faint">
+        <span className="tabular rounded-full border border-[var(--bc-gilt-line)] bg-[rgba(22,17,9,0.85)] px-3 py-1 font-mono text-xs text-accent-deep [box-shadow:0_4px_10px_rgba(0,0,0,0.4)]">
           {entries.length} {entries.length === 1 ? 'edition' : 'editions'}
         </span>
       </div>
-      <div className="tray px-4 pb-2.5 pt-3.5">
-        <div className="relative">
-          <svg
-            aria-hidden
-            className="pointer-events-none absolute -inset-x-2 bottom-0.5 h-14 w-[calc(100%+16px)]"
-            viewBox="0 0 1000 56"
-            preserveAspectRatio="none"
-          >
-            <path
-              d="M0 12 Q500 56 1000 12"
-              fill="none"
-              stroke="rgba(18,23,15,0.16)"
-              strokeWidth="1.5"
-              strokeDasharray="5 7"
-              vectorEffect="non-scaling-stroke"
-            />
-          </svg>
+      <div className="gilt-frame">
+        <div className="bc-pitch relative overflow-hidden">
+          <ShelfLights />
           <div
             ref={rowRef}
-            className="scrollbar-none relative z-[1] flex snap-x snap-mandatory items-stretch gap-3.5 overflow-x-auto overflow-y-hidden px-0.5 pb-[30px] pt-[26px]"
+            onPointerDown={handleShelfPointerDown}
+            onPointerMove={handleShelfPointerMove}
+            onPointerUp={handleShelfPointerEnd}
+            onPointerLeave={handleShelfPointerEnd}
+            onClickCapture={suppressClickAfterDrag}
+            className={`scrollbar-none relative z-[3] snap-x snap-mandatory overflow-x-auto overflow-y-hidden select-none ${
+              isDragging ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
           >
-            {entries.map((entry, index) => {
-              let card: ReactNode;
-              if (entry.kind === 'replay') {
-                card = <ReplayCard entry={entry} />;
-              } else if (entry.kind === 'live') {
-                card = <LiveCard entry={entry} />;
-              } else {
-                card = <UpcomingCard entry={entry} nowMs={nowMs} />;
-              }
-              return (
-                <div
-                  key={`${entry.kind}-${entry.fixtureId}`}
-                  data-arc
-                  data-rail-focus={index === focusIndex ? '' : undefined}
-                  className="flex min-w-[240px] flex-[1_1_240px] snap-center [animation:deck-in_var(--duration-standard)_var(--ease-enter)_both]"
-                  style={{ animationDelay: `${300 + index * 40}ms` }}
-                >
-                  <div className="flex flex-1" style={{ transform: `translateY(${ARC_BASE_DROP}px)` }}>
+            <div className="mx-auto flex w-max items-end gap-5 px-7 pb-8 pt-16 max-sm:pt-10">
+              {entries.map((entry, index) => {
+                let card: ReactNode;
+                if (entry.kind === 'replay') {
+                  card = <ReplayCard entry={entry} />;
+                } else if (entry.kind === 'live') {
+                  card = <LiveCard entry={entry} />;
+                } else {
+                  card = <UpcomingCard entry={entry} nowMs={nowMs} />;
+                }
+                return (
+                  <div
+                    key={`${entry.kind}-${entry.fixtureId}`}
+                    data-rail-focus={index === focusIndex ? '' : undefined}
+                    className="flex snap-center [animation:deck-in_var(--duration-standard)_var(--ease-enter)_both]"
+                    style={{ animationDelay: `${300 + index * 40}ms` }}
+                  >
                     {card}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
+          <StageFloor />
+          <p className="tabular relative z-[3] mb-3 mt-0 text-center font-mono text-xs text-ink-faint">
+            the shelf scrolls sideways, the live edition pops off it
+          </p>
         </div>
-        <p className="mb-1 mt-1.5 text-center text-[11px] text-ink-faint">
-          the shelf scrolls sideways, the live edition pops off it
-        </p>
       </div>
     </section>
   );

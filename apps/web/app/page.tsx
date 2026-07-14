@@ -1,27 +1,35 @@
+import type { Viewport } from 'next';
 import Link from 'next/link';
 import { fetchDuelStats, fetchFixtures, fetchReplayTapes } from '../lib/api';
 import { fetchSponsorBoard } from '../lib/sponsor-api';
-import { buildWheelTeams } from '../lib/teams';
+import { buildWheelTeams, type WheelTeam } from '../lib/teams';
 import { EmptyState } from '../components/ui/empty-state';
 import { Eyebrow } from '../components/ui/eyebrow';
 import { Tray } from '../components/ui/surface';
-import { buttonClassName } from '../components/ui/button-styles';
-import { TournamentWheelBackdrop } from '../components/lobby/tournament-wheel';
+import { StadiumBowl } from '../components/lobby/stadium-bowl';
+import { GoldTrophy } from '../components/lobby/gold-trophy';
 import { ProgrammeRail, type RailEntry } from '../components/lobby/programme-rail';
 import { DuelLine } from '../components/lobby/duel-line';
 import { SponsorTicker } from '../components/lobby/sponsor-ticker';
 import { HowItWorks } from '../components/onboarding/how-it-works';
 
+export const viewport: Viewport = {
+  // sourceRef: docs/UI_DESIGN_SYSTEM.md, broadcast night field --cream.
+  themeColor: '#0A130C',
+};
+
 function NavCard() {
   const navLinkClasses =
-    'inline-flex min-h-10 items-center justify-center rounded-chip border border-hairline px-4 text-sm font-medium text-ink transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] hover:underline active:scale-[0.97]';
+    'gilt-btn inline-flex min-h-10 items-center justify-center rounded-card px-4.5 text-sm font-semibold text-ink no-underline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] hover:text-white active:scale-[0.97]';
   return (
     <nav
       aria-label="Main"
-      className="mt-4 flex items-center justify-between gap-3 rounded-card border border-hairline bg-card px-4 py-2.5 [box-shadow:var(--shadow-float)]"
+      className="gilt-plate flex items-center justify-between gap-4 rounded-[12px] px-6 py-3.5"
     >
-      <span className="text-[17px] font-semibold tracking-[-0.03em]">CALLED IT</span>
-      <div className="flex gap-2">
+      <span className="whitespace-nowrap text-[17px] font-bold tracking-[0.15em] text-ink [text-shadow:0_1px_0_rgba(0,0,0,0.6)]">
+        CALLED IT
+      </span>
+      <div className="flex gap-2.5">
         <Link href="/leaderboard" className={navLinkClasses}>
           Leaderboard
         </Link>
@@ -37,24 +45,41 @@ function HeroText() {
   return (
     <>
       <Eyebrow>Free live prediction game</Eyebrow>
-      <h1 className="mt-4 text-[clamp(36px,4.6vw,52px)] font-medium leading-[1.08] tracking-[-0.03em]">
+      <h1 className="bc-title mt-5 text-[clamp(38px,6vw,78px)] font-bold leading-[1.06] tracking-[-0.02em] text-white">
         Call the match live.
         <br />
-        <span className="text-accent">Prove it on Solana.</span>
+        <span className="bc-blue-glow text-[var(--bc-blue)]">Prove it on Solana.</span>
       </h1>
-      <p className="mt-3.5 text-base text-ink-muted">
+      <p className="bc-title mt-5 text-[clamp(16px,1.6vw,20px)] text-ink-muted">
         Priced by the market. Settled by the feed. Anchored on-chain.
       </p>
     </>
   );
 }
 
-/** Plain hero, no wheel: the feed-down error branch where no teams exist. */
-function HeroHeader() {
+/** The night-field shell every lobby branch renders inside. The top padding
+ *  lives on main (not a child margin) so nothing collapses through the shell
+ *  and exposes the cream body above the night field. */
+function BroadcastShell({ children }: { children: React.ReactNode }) {
   return (
-    <header className="mx-auto mb-14 mt-13 max-w-[760px] text-center">
-      <HeroText />
-    </header>
+    <div className="broadcast broadcast-field min-h-dvh overflow-x-clip">
+      <main className="mx-auto w-full max-w-[1240px] px-5 pb-16 pt-6 sm:px-8">{children}</main>
+    </div>
+  );
+}
+
+/** Alive counter over the bowl; renders only when the feed served teams. */
+function TeamsCounter({ teams }: { teams: WheelTeam[] }) {
+  if (teams.length === 0) {
+    return null;
+  }
+  const aliveCount = teams.filter((team) => team.status === 'alive').length;
+  return (
+    <div className="mt-3 flex justify-end">
+      <span className="tabular font-mono text-xs tracking-[0.08em] text-ink-faint">
+        {teams.length} teams &middot; {aliveCount} alive
+      </span>
+    </div>
   );
 }
 
@@ -69,9 +94,11 @@ export default async function LobbyPage() {
 
   if (!fixturesResult.ok) {
     return (
-      <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+      <BroadcastShell>
         <NavCard />
-        <HeroHeader />
+        <header className="mx-auto mb-14 mt-16 max-w-[760px] text-center">
+          <HeroText />
+        </header>
         <Tray className="p-2">
           <div className="mx-2.5 mb-2 mt-1.5 flex">
             <Eyebrow>Live now</Eyebrow>
@@ -80,13 +107,16 @@ export default async function LobbyPage() {
             motif="error"
             title="The feed dropped"
             action={
-              <Link href="/" className={buttonClassName('primary')}>
+              <Link
+                href="/"
+                className="gilt-btn inline-flex min-h-10 items-center justify-center rounded-card px-4.5 text-sm font-semibold text-ink no-underline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] hover:text-white active:scale-[0.97]"
+              >
                 Retry
               </Link>
             }
           />
         </Tray>
-      </main>
+      </BroadcastShell>
     );
   }
 
@@ -177,44 +207,57 @@ export default async function LobbyPage() {
     })),
   ];
 
+  const wheelTeams = buildWheelTeams(fixturesResult.fixtures, nowMs);
+
   return (
-    <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+    <BroadcastShell>
       <NavCard />
       {/* Header board: renders only when someone has paid (product rule). */}
       <div className="mt-4">
         <SponsorTicker sponsors={sponsorBoard} />
       </div>
-      {/* The hero rides over the ambient tournament wheel: the wheel is the
-          backdrop behind the title, its own text block is gone, the duel
+      <TeamsCounter teams={wheelTeams} />
+      {/* The hero rides inside the stadium bowl: the bowl is the backdrop
+          behind the title, the trophy is the one gold ornament, the duel
           line closes the block. */}
-      <section className="relative mx-auto mb-12 mt-2 max-w-[900px]">
-        <TournamentWheelBackdrop teams={buildWheelTeams(fixturesResult.fixtures, nowMs)} />
-        <div className="relative z-[1] mx-auto max-w-[720px] px-5 pb-1 pt-[132px] text-center">
+      <section className="relative mx-auto -mt-1.5 mb-12">
+        <StadiumBowl teams={wheelTeams} />
+        <div className="relative z-[4] mx-auto max-w-[860px] px-5 pt-[104px] text-center sm:pt-[140px] lg:pt-[158px]">
           <HeroText />
-          <DuelLine stats={duelStats} className="mt-6" />
+          <div className="relative mt-8 flex flex-col items-center">
+            <div aria-hidden className="trophy-plinth absolute -bottom-1.5 h-16 w-[264px]" />
+            <GoldTrophy width={86} />
+          </div>
+          <DuelLine stats={duelStats} className="mt-7" />
         </div>
       </section>
 
-      <HowItWorks className="mb-5" />
+      <HowItWorks className="mb-6" />
 
       {railEntries.length === 0 ? (
-        <Tray className="mt-7 p-2">
-          <div className="mx-2.5 mb-2 mt-1.5 flex">
+        <div className="mt-10">
+          <div className="mx-0.5 mb-3 flex">
             <Eyebrow>The programme</Eyebrow>
           </div>
-          <EmptyState motif="ball" title="No matches in the window yet" />
-        </Tray>
+          <div className="gilt-frame">
+            <div className="bc-pitch p-2">
+              <EmptyState motif="ball" title="No matches in the window yet" />
+            </div>
+          </div>
+        </div>
       ) : (
         <ProgrammeRail entries={railEntries} />
       )}
 
-      <p className="mt-11 text-center text-xs text-ink-muted">
-        runs on TxLINE data, anchored on Solana{' '}
-        <span aria-hidden>&middot;</span>{' '}
-        <Link href="/sponsor" className="underline decoration-hairline underline-offset-2">
+      <p className="tabular mt-12 text-center font-mono text-xs text-ink-faint">
+        runs on TxLINE data, anchored on Solana <span aria-hidden>&middot;</span>{' '}
+        <Link
+          href="/sponsor"
+          className="text-accent underline decoration-[var(--accent-line)] underline-offset-[3px] hover:text-accent-deep"
+        >
           sponsor the board
         </Link>
       </p>
-    </main>
+    </BroadcastShell>
   );
 }

@@ -86,7 +86,7 @@ export function SponsorTicker({
   return (
     <section
       aria-label="Sponsor board"
-      className="overflow-hidden rounded-card bg-ink py-2.5 [box-shadow:var(--shadow-btn-secondary)]"
+      className="overflow-hidden rounded-card bg-[var(--plate)] py-2.5 [box-shadow:var(--shadow-btn-secondary)]"
     >
       <div
         className="flex w-max [animation:ticker-scroll_linear_infinite]"

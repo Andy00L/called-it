@@ -168,6 +168,56 @@ Every primitive ships default, hover, focus-visible, active, disabled, loading
 states at birth. Focus treatment: 2 px `--accent` ring offset 2 px, on cream
 and on white alike.
 
+## Broadcast night (lobby skin, 2026-07-14)
+
+Deliberate sheet extension (design-motion loop edge case: improvement enters
+through the sheet). The user approved a Claude Design export
+(`ui-design/return/new ui/loby`) that reskins the LOBBY ONLY as a floodlit
+night broadcast; every inner screen (match, leaderboard, profile, receipt,
+sponsor) keeps the printed programme above. The receipt stays the brand
+object, unchanged.
+
+Mechanism: the `.broadcast` scope in `apps/web/app/globals.css` remaps the
+palette ROLE tokens for the lobby subtree, so shared primitives (Eyebrow,
+Skeleton, EmptyState, DuelLine) reskin without forking. Broadcast-only roles
+are prefixed `--bc-`.
+
+| Role | Token | Value | Notes |
+| --- | --- | --- | --- |
+| Field | `--cream` | `#0A130C` | night pitch; `.broadcast-field` layers the floodlit green |
+| Tray | `--soft` | `#101B12` | dark tray (error branch) |
+| Card | `--card` | `#1D242E` | broadcast slate |
+| Ink | `--ink` | `#F3EFE2` | warm floodlight white |
+| Muted ink | `--ink-muted` | `#B9AD90` | 7.6:1 on the slate card |
+| Faint ink | `--ink-faint` | `#8F9A86` | decorative mono captions only |
+| Accent | `--accent` | `#D9BC6A` | gilt gold, the interactive color |
+| Accent deep | `--accent-deep` | `#E8CF87` | brighter on dark (inverts the light rule) |
+| Reserved: stadium blue | `--bc-blue` | `#6DB1FF` | exactly twice: the bowl rings and the "Prove it on Solana" line |
+| Reserved: live green | `--bc-live` / `--bc-live-dim` / `--bc-live-deep` | `#58D68D` / `#9FD0A4` / `#2F9E57` | live status and market-bar favored segment only |
+| Bar slots | `--bc-slot-mid` / `--bc-slot-low` | `#39414B` / `#2B323A` | non-favored teaser segments |
+| Plate | `--plate` | `#10151B` | LED sponsor board (equals `--ink` on the light skin) |
+
+Materials (recipes live as classes in globals.css): `.broadcast-field` (the
+night pitch with mowing stripes and vignette), `.gilt-frame` (2.5px brushed
+gold border, nested radius 13), `.gilt-plate` (bronze nav bar),
+`.gilt-plate-deep` (bronze interior), `.gilt-btn`, `.gilt-icon-box`,
+`.bc-card` (slate edition card), `.bc-card-pop` (the live edition's gold
+border and glow), `.bc-pitch` (the shelf's floodlit stand), the bowl ring
+set, and the stage floor set. One light source: the floodlights, top-down.
+
+Signature elements of the skin: the stadium bowl (wireframe ellipse behind
+the hero, team badges orbiting the rim on a 90s linear loop; linear is
+correct for a continuous orbit) and the gold trophy, the ONE ornament, placed
+once under the hero title (the export's flanking duplicate trophies and its
+per-country CSS-gradient flags were dropped: ornaments appear once, and
+roundels remain the product's only team mark).
+
+Motion additions: `bowl-orbit` (90s linear, gated on
+`prefers-reduced-motion: no-preference` so reduced motion holds badges at
+their static rim seats), `flood-flicker` and `bowl-pulse` (ambient, 3 to 5s),
+and `live-pop` retargeted to -18px for the shelf. Everything else reads the
+standard motion tokens.
+
 ## Accessibility floor
 
 Contrast per the palette table (faint ink never for body; small accent text

@@ -19,10 +19,13 @@ const TOP_RANK_COUNT = 3;
 export function Standings({ entries }: { entries: LeaderboardEntry[] }) {
   const [youPlayerId, setYouPlayerId] = useState<string | null>(null);
 
-  // The stored identity is client-only; read it once after mount.
+  // The stored identity is client-only. Keyed on entries: JoinBoard stores
+  // a fresh session then calls router.refresh(), which replaces the server
+  // prop while PRESERVING this component's state, so a mount-only read
+  // would never learn the new identity and the "you" row would stay dark.
   useEffect(() => {
     setYouPlayerId(readStoredSession()?.playerId ?? null);
-  }, []);
+  }, [entries]);
 
   return (
     <Tray className="p-2">

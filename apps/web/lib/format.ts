@@ -17,21 +17,6 @@ export function formatProbability(fraction: number): string {
   return `${(fraction * 100).toFixed(1)}%`;
 }
 
-// Six days: within a week a short weekday is unambiguous; past that the row
-// needs the calendar date (a friendly two months out read as this "Fri").
-const KICKOFF_WEEKDAY_ONLY_WINDOW_MS = 6 * 24 * 60 * 60 * 1000;
-
-/** Kickoff time in the viewer's locale and timezone; dated beyond a week. */
-export function formatKickoff(startTimeMs: number): string {
-  const needsDate = startTimeMs - Date.now() >= KICKOFF_WEEKDAY_ONLY_WINDOW_MS;
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    ...(needsDate ? { month: 'short', day: 'numeric' } : {}),
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(startTimeMs));
-}
-
 /** Kickoff as a bare clock time for the score card: 21:00. */
 export function formatKickoffClock(startTimeMs: number): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -48,6 +33,11 @@ export function formatPoints(points: number): string {
 /** Streak multiplier for display: 1.21 -> "x1.2". */
 export function formatMultiplier(multiplier: number): string {
   return `x${multiplier.toFixed(1)}`;
+}
+
+/** Solana explorer link for a transaction, on the network that signed it. */
+export function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
+  return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;
 }
 
 /** Hash or tx signature on tickets: first 8 + last 8 characters. */

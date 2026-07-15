@@ -61,9 +61,16 @@ export function PlayerCard({
 }) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
-  // The card is a small dialog: focus lands on close, Escape dismisses.
+  // Focus lands on close ONCE, when the dialog opens. Keyed on nothing:
+  // the parent recreates onClose on every SSE state frame, and focus()
+  // scrolls its target into view, so keying this on onClose yanked the
+  // viewport back to the close button on every live tick.
   useEffect(() => {
     closeRef.current?.focus();
+  }, []);
+
+  // Escape dismisses (external system: window keyboard events).
+  useEffect(() => {
     const handleKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
         onClose();

@@ -2,17 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchReceipt, isPickIdShaped } from '../../../lib/api';
-import { formatPoints, formatProbability } from '../../../lib/format';
+import { explorerTxUrl, formatPoints, formatProbability } from '../../../lib/format';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Tray } from '../../../components/ui/surface';
 import { buttonClassName } from '../../../components/ui/button-styles';
 import { ReceiptTicket } from '../../../components/receipt/receipt-ticket';
 import { ReceiptActions } from '../../../components/receipt/receipt-actions';
 import { resolveSponsorName } from '../../../lib/sponsor';
-
-function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
-  return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;
-}
 
 /** Link-unfurl metadata; the card image itself is ./opengraph-image.tsx. */
 export async function generateMetadata({

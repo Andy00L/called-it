@@ -174,7 +174,6 @@ export function MatchScreen({
   const channelPath =
     mode.kind === 'live' ? `/live/${mode.fixtureId}` : `/replay/sessions/${mode.sessionId}/live`;
   const { payload, connection, settlements, nearMisses } = useWorkerStream(channelPath);
-  const displayClockSeconds = useTickingClock(payload);
 
   const [session, setSession] = useState<GuestSession | null>(null);
   // Keyed by category, not option id: window options regenerate ids as the
@@ -188,6 +187,8 @@ export function MatchScreen({
   const [justLockedCategory, setJustLockedCategory] = useState<CallCategory | null>(null);
   const [speed, setSpeed] = useState(mode.kind === 'replay' ? mode.initialSpeed : 1);
   const [replayNotice, setReplayNotice] = useState<string | null>(null);
+  // Replays compress time, so the between-frames tick runs at session speed.
+  const displayClockSeconds = useTickingClock(payload, mode.kind === 'replay' ? speed : 1);
   // The pitch is big by default; the viewer can reduce it to reach the calls.
   const [pitchReduced, setPitchReduced] = useState(false);
   // The call deck folds to a narrow rail so the pitch takes the width
@@ -202,6 +203,9 @@ export function MatchScreen({
   // The picks a reload wiped from memory, restored from the worker (they were
   // never gone server-side). Pending ones re-seed the lock state; settled
   // ones re-enter the list and the points (external system: worker HTTP).
+  // Keyed on connection too: the SSE channel replays NO backlog, so a pick
+  // that settled while the tab was disconnected (phone slept, wifi dropped)
+  // only ever reaches this client through a re-fetch on the reconnect.
   const [restoredEntries, setRestoredEntries] = useState<MyPickEntry[]>([]);
   useEffect(() => {
     const abortController = new AbortController();
@@ -231,7 +235,7 @@ export function MatchScreen({
     };
     void restorePicks();
     return () => abortController.abort();
-  }, [mode, session]);
+  }, [mode, session, connection]);
 
   useEffect(() => {
     if (justLockedCategory === null) {

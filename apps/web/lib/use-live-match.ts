@@ -78,10 +78,12 @@ export function useWorkerStream(channelPath: string): LiveMatchStream {
 
 /**
  * Derived display clock: ticks locally between state frames while the match
- * clock runs. useEffect is justified: an interval timer is an external
- * system with cleanup.
+ * clock runs. Replays compress time, so the local tick advances at the
+ * session's speed multiplier (10x replay = 10 match seconds per real
+ * second) instead of crawling at 1x between frames. useEffect is justified:
+ * an interval timer is an external system with cleanup.
  */
-export function useTickingClock(payload: LivePayload | null): number {
+export function useTickingClock(payload: LivePayload | null, speedMultiplier = 1): number {
   const baseSeconds = payload?.clockSeconds ?? 0;
   const running = payload?.clockRunning ?? false;
   const [displaySeconds, setDisplaySeconds] = useState(baseSeconds);
@@ -93,10 +95,12 @@ export function useTickingClock(payload: LivePayload | null): number {
     }
     const startedAtMs = Date.now();
     const timer = setInterval(() => {
-      setDisplaySeconds(baseSeconds + Math.floor((Date.now() - startedAtMs) / 1000));
+      setDisplaySeconds(
+        baseSeconds + Math.floor(((Date.now() - startedAtMs) * speedMultiplier) / 1000),
+      );
     }, 1000);
     return () => clearInterval(timer);
-  }, [baseSeconds, running]);
+  }, [baseSeconds, running, speedMultiplier]);
 
   return displaySeconds;
 }

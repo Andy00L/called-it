@@ -10,7 +10,7 @@ import { formatClockMinutes, formatPoints, formatProbability } from '../../lib/f
 // worker refuses locks under this margin, so the card disables first.
 const WINDOW_CLOSING_SECONDS = 120;
 
-export interface LockedView {
+interface LockedView {
   lockClockSeconds: number;
 }
 

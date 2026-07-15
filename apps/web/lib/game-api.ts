@@ -1,4 +1,10 @@
-import type { GuestSession, LockResult, MyPickEntry, ProfilePayload } from '@calledit/contracts';
+import type {
+  GuestSession,
+  LockResult,
+  MyPickEntry,
+  MyPicksPayload,
+  ProfilePayload,
+} from '@calledit/contracts';
 import { workerUrl } from './api';
 
 /** Client for the game routes. Every failure mode is distinct and typed. */
@@ -156,7 +162,7 @@ export async function fetchMyPicks(
     return { ok: false, reason: 'server' };
   }
   try {
-    const payload = (await response.json()) as { picks: MyPickEntry[] };
+    const payload = (await response.json()) as MyPicksPayload;
     return { ok: true, entries: payload.picks };
   } catch {
     return { ok: false, reason: 'server' };

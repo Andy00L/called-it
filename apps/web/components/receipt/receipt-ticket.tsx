@@ -1,5 +1,6 @@
 import type { OracleVerification, ReceiptPayload } from '@calledit/contracts';
 import {
+  explorerTxUrl,
   formatClockMinutes,
   formatPoints,
   formatProbability,
@@ -12,10 +13,6 @@ import {
  * rules, perforated edges, a deterministic slight rotation. Settlement
  * moments and the public /r/{id} page only.
  */
-
-function explorerTxUrl(txSig: string, network: 'mainnet' | 'devnet'): string {
-  return `https://explorer.solana.com/tx/${txSig}${network === 'devnet' ? '?cluster=devnet' : ''}`;
-}
 
 function PaperRule() {
   return <div aria-hidden className="my-2 border-t border-dashed [border-color:var(--paper-rule)]" />;

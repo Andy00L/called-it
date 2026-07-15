@@ -39,15 +39,17 @@ export function FinalEditionCard({
       <Card className="p-4 sm:px-4.5">
         {rows.map((row, index) => {
           const isBest = bestPickId !== null && row.pick.id === bestPickId;
+          // min-w-0 flex-1 lets the flex child shrink so truncate engages;
+          // without them a long claim pushes the verdict out of the card.
           const claimNode = withReceiptLinks ? (
             <Link
               href={`/r/${row.pick.id}`}
-              className="truncate text-sm font-medium underline decoration-hairline underline-offset-2"
+              className="min-w-0 flex-1 truncate text-sm font-medium underline decoration-hairline underline-offset-2"
             >
               {row.pick.claim}
             </Link>
           ) : (
-            <span className="truncate text-sm font-medium">{row.pick.claim}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">{row.pick.claim}</span>
           );
           return (
             <div key={row.pick.id}>

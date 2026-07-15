@@ -7,7 +7,7 @@ import type { MatchResultProbabilities } from '@calledit/contracts';
  * screen; a 2px echo on live lobby rows.
  */
 
-export type FavoredSide = 'p1' | 'draw' | 'p2';
+type FavoredSide = 'p1' | 'draw' | 'p2';
 
 export function favoredSide(matchResult: MatchResultProbabilities): FavoredSide {
   if (matchResult.p1 >= matchResult.draw && matchResult.p1 >= matchResult.p2) {

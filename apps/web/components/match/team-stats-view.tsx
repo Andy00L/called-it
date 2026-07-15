@@ -173,9 +173,16 @@ export function TeamStatsView({
 }) {
   const backRef = useRef<HTMLButtonElement | null>(null);
 
-  // Full-screen dialog: focus the back control, lock body scroll, Escape closes.
+  // Focus lands on the back control ONCE, when the view opens. Keyed on
+  // nothing: the parent recreates onClose on every SSE state frame, and
+  // focus() scrolls its target into view, so keying this on onClose yanked
+  // the viewport back to the top on every live tick.
   useEffect(() => {
     backRef.current?.focus();
+  }, []);
+
+  // Body scroll lock and Escape (external systems: document and keyboard).
+  useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKey = (event: KeyboardEvent): void => {

@@ -60,6 +60,10 @@ type FlowPhase =
   | { kind: 'quoting' }
   | { kind: 'paying'; walletName: string }
   | { kind: 'confirming' }
+  /** A transfer is signed and out but not confirmed active: the pay control
+   *  must never come back for this intent, or a second real transfer could
+   *  be signed. Only re-checking is offered. */
+  | { kind: 'confirm_stalled'; signatureBase58: string; message: string }
   | { kind: 'done'; activation: SponsorActivation }
   | { kind: 'error'; message: string };
 
@@ -109,6 +113,35 @@ export function SponsorForm() {
     setPhase({ kind: 'editing' });
   };
 
+  // Confirm loop for an ALREADY SENT transfer. Any exit that is not "done"
+  // lands on confirm_stalled, never back on a payable state: the money is
+  // out, so the only safe offer is checking again with the same signature.
+  const runConfirmLoop = async (intentId: string, signatureBase58: string): Promise<void> => {
+    setPhase({ kind: 'confirming' });
+    for (let attempt = 0; attempt < CONFIRM_ATTEMPTS; attempt += 1) {
+      const confirmed = await confirmSponsor(intentId, signatureBase58);
+      if (confirmed.ok) {
+        setPhase({ kind: 'done', activation: confirmed.value });
+        return;
+      }
+      if (confirmed.reason !== 'payment_pending' && confirmed.reason !== 'network') {
+        setPhase({
+          kind: 'confirm_stalled',
+          signatureBase58,
+          message: SPONSOR_FAILURE_COPY[confirmed.reason],
+        });
+        return;
+      }
+      await waitMs(CONFIRM_INTERVAL_MS);
+    }
+    setPhase({
+      kind: 'confirm_stalled',
+      signatureBase58,
+      message:
+        'The payment went out but the chain is slow to confirm. Check again in a moment; your slot activates as soon as it lands.',
+    });
+  };
+
   const handlePay = async (wallet: SolanaWalletEntry): Promise<void> => {
     if (quote === null) {
       return;
@@ -128,23 +161,7 @@ export function SponsorForm() {
       setPhase({ kind: 'error', message: WALLET_PAY_COPY[sent.reason] });
       return;
     }
-    setPhase({ kind: 'confirming' });
-    for (let attempt = 0; attempt < CONFIRM_ATTEMPTS; attempt += 1) {
-      const confirmed = await confirmSponsor(intentId, sent.signatureBase58);
-      if (confirmed.ok) {
-        setPhase({ kind: 'done', activation: confirmed.value });
-        return;
-      }
-      if (confirmed.reason !== 'payment_pending' && confirmed.reason !== 'network') {
-        failWith(confirmed.reason);
-        return;
-      }
-      await waitMs(CONFIRM_INTERVAL_MS);
-    }
-    setPhase({
-      kind: 'error',
-      message: 'The payment went out but the chain is slow to confirm. Reload in a minute; your slot activates as soon as it lands.',
-    });
+    await runConfirmLoop(intentId, sent.signatureBase58);
   };
 
   if (phase.kind === 'done') {
@@ -304,6 +321,24 @@ export function SponsorForm() {
           >
             Lock this price
           </Button>
+        ) : phase.kind === 'confirm_stalled' ? (
+          <div className="flex flex-col gap-2">
+            <p role="alert" className="text-sm text-ink">
+              {phase.message}
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void runConfirmLoop(quote.intentId, phase.signatureBase58);
+              }}
+            >
+              Check the payment again
+            </Button>
+            <p className="text-xs text-ink-muted">
+              Your transfer is signed and on its way; do not pay again. This button re-checks the
+              same transaction.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             <WalletPicker

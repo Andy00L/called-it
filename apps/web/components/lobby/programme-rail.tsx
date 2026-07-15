@@ -23,7 +23,7 @@ const DEFAULT_REPLAY_SPEED = 10;
 // Mouse travel in px before a shelf drag suppresses the click underneath.
 const DRAG_CLICK_THRESHOLD_PX = 6;
 
-export interface RailReplayEntry {
+interface RailReplayEntry {
   kind: 'replay';
   fixtureId: number;
   participant1: string;
@@ -33,7 +33,7 @@ export interface RailReplayEntry {
   score: { p1: number; p2: number } | null;
 }
 
-export interface RailLiveEntry {
+interface RailLiveEntry {
   kind: 'live';
   fixtureId: number;
   participant1: string;
@@ -44,7 +44,7 @@ export interface RailLiveEntry {
   matchResult: MatchResultProbabilities | null;
 }
 
-export interface RailUpcomingEntry {
+interface RailUpcomingEntry {
   kind: 'upcoming';
   fixtureId: number;
   participant1: string;

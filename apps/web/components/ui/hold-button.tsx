@@ -91,8 +91,25 @@ export function HoldButton({
         }
       }}
       onPointerUp={cancelHoldTimer}
-      onPointerLeave={cancelHoldTimer}
-      onPointerCancel={cancelHoldTimer}
+      onPointerEnter={(event) => {
+        // A pressed pointer dragging back onto the button re-owns it, so the
+        // click fired on release is still swallowed.
+        if (event.buttons !== 0) {
+          pointerOwnedRef.current = true;
+        }
+      }}
+      onPointerLeave={() => {
+        cancelHoldTimer();
+        // No click follows a release outside the button: release ownership
+        // here or the NEXT keyboard/AT activation would be swallowed by the
+        // stale flag. pointerup on the button keeps ownership because its
+        // click still fires and must not double-trigger.
+        pointerOwnedRef.current = false;
+      }}
+      onPointerCancel={() => {
+        cancelHoldTimer();
+        pointerOwnedRef.current = false;
+      }}
       onContextMenu={(event) => {
         // A long touch press must fill the button, not open the menu.
         event.preventDefault();

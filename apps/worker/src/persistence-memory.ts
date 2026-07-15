@@ -405,6 +405,11 @@ export function createMemoryPersistence(): PersistencePort {
       return ok(undefined);
     },
 
+    removeTerraceMember: async (code, playerId) => {
+      terraceMembersByCode.get(code)?.delete(playerId);
+      return ok(undefined);
+    },
+
     listTerraceMembers: async (code) => {
       const members = terraceMembersByCode.get(code) ?? new Set<string>();
       return ok(

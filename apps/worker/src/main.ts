@@ -1,8 +1,8 @@
 import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { LivePayload, ReceiptPayload } from '@calledit/contracts';
-import { ok, type Result } from '@calledit/txline';
-import { appendTapeEntry, openTapeDeck } from './tape.js';
+import { ok, type OddsPayload, type Result, type ScoresUpdate } from '@calledit/txline';
+import { appendTapeEntry, openTapeDeck, readTape, tapeFilePath } from './tape.js';
 import {
   createCommitmentBatcher,
   hashPickLeaf,
@@ -628,6 +628,36 @@ async function main(): Promise<void> {
   });
 
   await game.hydratePendingPicks();
+
+  // Stranded-pick reconciliation: a pick left pending across a restart has
+  // no resolution path when its match ENDED during the downtime, because
+  // match state lives in memory and is rebuilt only from live stream events
+  // that will never arrive for a finished fixture. Rebuild those fixtures
+  // from their tapes through the same reducers the live ingest uses, then
+  // resolve once. A fixture still live keeps its normal path: the first
+  // stream event recreates its state (and skipping here avoids folding a
+  // tape under live traffic).
+  for (const fixtureId of game.pendingFixtureIds()) {
+    if (getMatchState(store, fixtureId) !== undefined) {
+      continue;
+    }
+    const tape = readTape(tapeFilePath(tapeDeck, fixtureId));
+    if (!tape.ok) {
+      console.warn(`[main] stranded picks on fixture ${fixtureId}, no tape to replay: ${tape.error}`);
+      continue;
+    }
+    for (const entry of tape.value.entries) {
+      if (entry.stream === 'scores') {
+        applyScoresUpdate(store, entry.payload as ScoresUpdate, entry.receivedAtMs);
+      } else {
+        applyOddsPayload(store, entry.payload as OddsPayload, entry.receivedAtMs);
+      }
+    }
+    console.log(
+      `[main] rebuilt fixture ${fixtureId} from its tape (${tape.value.entries.length} entries) to resolve stranded picks`,
+    );
+    await game.resolveFixture(fixtureId);
+  }
 
   // First fill before serving; failures tolerated (lobby then shows ids only).
   await fixtureCatalog.refresh();

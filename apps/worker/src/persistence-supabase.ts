@@ -738,6 +738,18 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
       return ok(undefined);
     },
 
+    removeTerraceMember: async (code, playerId) => {
+      const { error } = await client
+        .from('terrace_members')
+        .delete()
+        .eq('terrace_code', code)
+        .eq('player_id', playerId);
+      if (error !== null) {
+        return err(`terrace member delete failed: ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
     listTerraceMembers: async (code) => {
       const memberRows = await client
         .from('terrace_members')

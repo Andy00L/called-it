@@ -168,6 +168,8 @@ export interface GameService {
   /** Public read of a terrace board (standings carry no secrets). */
   terraceStandings(rawCode: unknown): Promise<Result<TerraceStandingsPayload, string>>;
   pendingPickCount(): number;
+  /** Fixtures holding at least one pending pick (boot reconciliation). */
+  pendingFixtureIds(): number[];
 }
 
 function hashPlayerToken(playerToken: string): string {
@@ -339,10 +341,18 @@ export function createGameService(deps: GameServiceDeps): GameService {
         : pick.predicate.team === 'p1'
           ? state.matchResult.p1
           : state.matchResult.p2;
-    if (state.phase === 'finished' && state.clockSeconds < pick.predicate.atClockSeconds) {
-      // Match ended before the target clock (abandonment edge): a hold that
-      // never reached its checkpoint cannot be a hit.
-      return 'miss';
+    if (state.phase === 'finished') {
+      if (targetTeamProbability === undefined) {
+        // No market reading ever arrived: an unevaluable hold cannot pay,
+        // and nothing more will arrive after full time.
+        return 'miss';
+      }
+      // The feed zeroes the clock at full time (clock_adjustment), and a
+      // stream gap can skip the checkpoint tick entirely, so a finished
+      // match resolves the hold with the LAST OBSERVED probability instead
+      // of misreading the zeroed clock as "never reached the checkpoint"
+      // and forcing a miss.
+      return resolveProbHold(pick.predicate, targetTeamProbability, Number.MAX_SAFE_INTEGER);
     }
     return resolveProbHold(pick.predicate, targetTeamProbability, state.clockSeconds);
   };
@@ -857,6 +867,26 @@ export function createGameService(deps: GameServiceDeps): GameService {
         if (!joined.ok) {
           return joined;
         }
+        // Re-check AFTER the write: two joins racing past the pre-check can
+        // both land when the room is one seat short. The overflow seats (by
+        // join order) are released, so the cap holds under concurrency.
+        const seated = await deps.persistence.listTerraceMembers(code);
+        if (!seated.ok) {
+          return seated;
+        }
+        const seatIndex = seated.value.findIndex(
+          (member) => member.playerId === authenticated.value.id,
+        );
+        if (seatIndex >= TERRACE_MEMBER_LIMIT) {
+          const released = await deps.persistence.removeTerraceMember(
+            code,
+            authenticated.value.id,
+          );
+          if (!released.ok) {
+            return released;
+          }
+          return err('terrace_full');
+        }
       }
       return buildTerraceStandings(terrace.value);
     },
@@ -883,5 +913,10 @@ export function createGameService(deps: GameServiceDeps): GameService {
       }
       return total;
     },
+
+    pendingFixtureIds: () =>
+      [...pendingByFixture.entries()]
+        .filter(([, fixturePicks]) => fixturePicks.size > 0)
+        .map(([fixtureId]) => fixtureId),
   };
 }

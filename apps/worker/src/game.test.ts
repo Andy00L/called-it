@@ -873,3 +873,67 @@ test('terrace standings rank members by fixture points with the Bookie pinned la
   const publicRead = await harness.game.terraceStandings(code.toLowerCase());
   assert.ok(publicRead.ok);
 });
+
+test('a feed gap across the checkpoint resolves the hold with the last observed market', async () => {
+  const harness = createHarness();
+  // Underdog at 20%: above the 15% survival threshold.
+  primeLiveMatch(harness, 909, 70 * 60, ['50.000', '30.000', '20.000']);
+  const guest = await createGuest(harness);
+  const probabilityOption = optionOf(catalogFor(harness, 909), 'probability');
+  const locked = await harness.game.lockPick(
+    guest.playerId,
+    guest.playerToken,
+    909,
+    probabilityOption.id,
+  );
+  assert.ok(locked.ok);
+
+  // The stream skips the 80' tick entirely; the next thing the worker sees
+  // is full time, where the feed zeroes the clock.
+  pushScores(harness, {
+    FixtureId: 909,
+    Action: 'clock_adjustment',
+    Clock: { Running: false, Seconds: 0 },
+  });
+  pushScores(harness, { FixtureId: 909, Action: 'game_finalised' });
+  await harness.game.resolveFixture(909);
+
+  const player = await harness.persistence.getPlayer(guest.playerId);
+  assert.ok(player.ok && player.value !== null);
+  // The last observed 20% clears the threshold: the hold pays, not a forced
+  // miss off the zeroed clock.
+  assert.equal(player.value.totalPoints, probabilityOption.potentialPoints);
+});
+
+test('two joins racing for the last terrace seat cannot blow past the cap', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 910, 600);
+  const owner = await createGuest(harness, 'room owner');
+  const created = await harness.game.createTerrace(owner.playerId, owner.playerToken, 910, undefined);
+  assert.ok(created.ok);
+  const code = created.value.room.code;
+
+  // Fill to 39 seats (owner holds the first).
+  for (let seat = 1; seat < 39; seat += 1) {
+    const filler = await createGuest(harness, `filler ${seat}`);
+    const seated = await harness.game.joinTerrace(filler.playerId, filler.playerToken, code);
+    assert.ok(seated.ok);
+  }
+
+  const racerA = await createGuest(harness, 'racer a');
+  const racerB = await createGuest(harness, 'racer b');
+  const [joinA, joinB] = await Promise.all([
+    harness.game.joinTerrace(racerA.playerId, racerA.playerToken, code),
+    harness.game.joinTerrace(racerB.playerId, racerB.playerToken, code),
+  ]);
+  const outcomes = [joinA, joinB];
+  const admitted = outcomes.filter((outcome) => outcome.ok);
+  const refused = outcomes.filter((outcome) => !outcome.ok);
+  assert.equal(admitted.length, 1);
+  assert.equal(refused.length, 1);
+  assert.ok(!refused[0]!.ok && refused[0]!.error === 'terrace_full');
+
+  const standings = await harness.game.terraceStandings(code);
+  assert.ok(standings.ok);
+  assert.equal(standings.value.room.memberCount, 40);
+});

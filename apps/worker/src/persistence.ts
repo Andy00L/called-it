@@ -203,6 +203,8 @@ export interface PersistencePort {
   getTerrace(code: string): Promise<Result<TerraceRecord | null, string>>;
   /** Idempotent membership insert: joining twice is a no-op. */
   addTerraceMember(code: string, playerId: string): Promise<Result<void, string>>;
+  /** Release a seat (the join cap's post-insert overflow compensation). */
+  removeTerraceMember(code: string, playerId: string): Promise<Result<void, string>>;
   /** Members with handles, oldest join first. */
   listTerraceMembers(code: string): Promise<Result<TerraceMemberEntry[], string>>;
   /** Settled fixture points for exactly the given players (0-point players

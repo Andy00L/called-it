@@ -211,9 +211,15 @@ Materials (recipes live as classes in globals.css): `.broadcast-field` (the
 night pitch with mowing stripes and vignette), `.gilt-frame` (2.5px brushed
 gold border, nested radius 13), `.gilt-plate` (bronze nav bar),
 `.gilt-plate-deep` (bronze interior), `.gilt-btn`, `.gilt-icon-box`,
-`.bc-card` (slate edition card), `.bc-card-pop` (the live edition's gold
-border and glow), `.bc-pitch` (the shelf's floodlit stand), the bowl ring
-set, and the stage floor set. One light source: the floodlights, top-down.
+`.bc-card` (slate edition card), `.bc-card-replay` (archive bronze),
+`.bc-card-pop` (the live edition's gold border and glow), `.bc-pitch` (the
+shelf's floodlit stand), the bowl ring set, and the stage floor set. One
+light source: the floodlights, top-down.
+
+Shelf temperature rule: card material encodes match state. Finished
+editions sit on archive bronze (warm = played, matching their gold FINAL
+EDITION stamp), the live edition pops on the gold border, and upcoming
+editions stay cool slate carrying the green market signal (cool = ahead).
 
 Signature elements of the skin: the stadium bowl (wireframe ellipse behind
 the hero, team badges orbiting the rim on a 90s linear loop; linear is

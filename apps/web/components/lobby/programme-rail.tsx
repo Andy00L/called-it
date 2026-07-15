@@ -157,7 +157,7 @@ function ReplayCard({ entry }: { entry: RailReplayEntry }) {
       }}
       disabled={isStarting}
       aria-label={`Final edition, ${entry.participant1} vs ${entry.participant2}, replay as live`}
-      className={`${CARD_BASE_CLASSES} cursor-pointer disabled:cursor-wait`}
+      className={`${CARD_BASE_CLASSES} bc-card-replay cursor-pointer disabled:cursor-wait`}
     >
       <div className="flex items-start justify-between gap-2.5">
         <span className="tabular inline-block rounded-chip border border-dashed border-[var(--accent-line)] bg-accent-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-accent-deep">

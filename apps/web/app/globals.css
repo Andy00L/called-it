@@ -251,6 +251,15 @@ body {
   border-radius: var(--radius-card);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
 }
+/* Finished editions read as archive bronze (warm = played); upcoming
+   editions keep the cool slate with the green market signal (cool = ahead). */
+.bc-card-replay {
+  background: linear-gradient(180deg, #292015 0%, #16100a 100%);
+  border-color: #7a5c1c;
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(243, 220, 146, 0.14);
+}
 /* The live edition pops off the shelf: gold border and glow. */
 .bc-card-pop {
   border: 2px solid var(--accent);

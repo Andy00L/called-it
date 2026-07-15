@@ -39,7 +39,7 @@ export function PaperPanel({
 }) {
   return (
     <div className={`gilt-frame ${className}`}>
-      <div className="gilt-frame-paper panel-paper overflow-hidden">{children}</div>
+      <div className="gilt-frame-paper panel-paper h-full overflow-hidden">{children}</div>
     </div>
   );
 }

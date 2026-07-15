@@ -185,6 +185,9 @@ export function MatchScreen({
   const [replayNotice, setReplayNotice] = useState<string | null>(null);
   // The pitch is big by default; the viewer can reduce it to reach the calls.
   const [pitchReduced, setPitchReduced] = useState(false);
+  // The call deck folds to a narrow rail so the pitch takes the width
+  // (accepted broadcast match export); live phase only.
+  const [callsCollapsed, setCallsCollapsed] = useState(false);
 
   // The stored identity marks "you" on the board without forcing a lock.
   useEffect(() => {
@@ -456,8 +459,17 @@ export function MatchScreen({
       )
     ) : (
       <Tray className="p-2">
-        <div className="mx-2.5 mb-2 mt-1.5 flex">
+        <div className="mx-2.5 mb-2 mt-1.5 flex items-center justify-between gap-3">
           <Eyebrow>Open calls</Eyebrow>
+          <button
+            type="button"
+            onClick={() => setCallsCollapsed(true)}
+            aria-expanded
+            aria-label="Collapse open calls"
+            className="inline-flex size-8 items-center justify-center rounded-chip border border-hairline bg-card text-sm text-ink-muted transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] hover:text-ink active:scale-[0.94] max-sm:hidden"
+          >
+            <span aria-hidden>&#187;</span>
+          </button>
         </div>
         {payload.catalog.length === 0 ? (
           <EmptyState motif="flag" title="Calls regenerate while the clock runs" />
@@ -536,28 +548,52 @@ export function MatchScreen({
           </PaperPanel>
         </div>
 
-        <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-5">
-          <PaperPanel>{callsSection}</PaperPanel>
+        {callsCollapsed && payload.phase === 'live' ? (
+          <div className="flex self-stretch max-sm:w-full">
+            <PaperPanel className="h-full w-full sm:w-[76px] sm:flex-none">
+              <button
+                type="button"
+                onClick={() => setCallsCollapsed(false)}
+                aria-expanded={false}
+                aria-label="Expand open calls"
+                className="flex h-full min-h-16 w-full flex-row items-center justify-center gap-3 p-3 transition-colors duration-[var(--duration-small)] ease-[var(--ease-standard)] hover:bg-soft active:scale-[0.99] sm:min-h-[480px] sm:flex-col sm:gap-4"
+              >
+                <span aria-hidden className="text-sm text-ink-muted">
+                  &#171;
+                </span>
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.24em] text-ink sm:[writing-mode:vertical-rl]">
+                  Open calls
+                </span>
+                <span className="tabular flex size-6 flex-none items-center justify-center rounded-full bg-accent font-mono text-xs font-semibold text-[var(--on-accent)]">
+                  {payload.catalog.length}
+                </span>
+              </button>
+            </PaperPanel>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-5">
+            <PaperPanel>{callsSection}</PaperPanel>
 
-          {payload.phase === 'live' && pendingMine.length > 0 ? (
-            <section aria-label="Your open calls">
-              <Eyebrow>Your open calls</Eyebrow>
-              <div className="mt-2.5 flex flex-wrap gap-2">
-                {pendingMine.map((entry) => (
-                  <span
-                    key={entry.pick.id}
-                    className="inline-flex items-center gap-2 rounded-chip border border-hairline bg-card px-2.5 py-2 text-[13px] text-ink [animation:chip-in_var(--duration-standard)_var(--ease-enter)_both]"
-                  >
-                    {entry.pick.claim}
-                    <span className="tabular font-mono text-xs text-ink-muted">
-                      {formatClockMinutes(entry.pick.lockClockSeconds)}
+            {payload.phase === 'live' && pendingMine.length > 0 ? (
+              <section aria-label="Your open calls">
+                <Eyebrow>Your open calls</Eyebrow>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {pendingMine.map((entry) => (
+                    <span
+                      key={entry.pick.id}
+                      className="inline-flex items-center gap-2 rounded-chip border border-hairline bg-card px-2.5 py-2 text-[13px] text-ink [animation:chip-in_var(--duration-standard)_var(--ease-enter)_both]"
+                    >
+                      {entry.pick.claim}
+                      <span className="tabular font-mono text-xs text-ink-muted">
+                        {formatClockMinutes(entry.pick.lockClockSeconds)}
+                      </span>
                     </span>
-                  </span>
-                ))}
-              </div>
-            </section>
-          ) : null}
-        </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div className="mt-5 flex flex-wrap items-start gap-5">

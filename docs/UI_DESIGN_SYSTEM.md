@@ -156,8 +156,12 @@ with the receipt). No glass, no grain, no gradients as decoration.
    a reduce toggle to a slim band. Amber stays reserved (corner flags use
    accent-deep).
 3. **The receipt.** Thermal-ticket surface (paper, mono, dashed rules,
-   perforated edges, slight rotation, floating shadow). Placement: settlement
-   moments and the public share page only. Never a generic card.
+   perforated edges, slight rotation, floating shadow). Placement: true
+   ticket objects only: settlement moments, the half-time report (prints at
+   45', 2026-07-14), the profile's tournament card (2026-07-14), and the
+   public share page. Never a generic card. The print-in overshoot stays
+   reserved for live settlements and the half-time report; the tournament
+   card enters on the standard fade-rise.
 
 ## Primitives
 
@@ -227,6 +231,12 @@ correct for a continuous orbit) and the gold trophy, the ONE ornament, placed
 once under the hero title (the export's flanking duplicate trophies and its
 per-country CSS-gradient flags were dropped: ornaments appear once, and
 roundels remain the product's only team mark).
+
+Terrace surfaces (2026-07-14): the group-room board on the match screen
+(`components/terrace/terrace-panel.tsx`) and the `/t/:code` invite page
+reuse PaperPanel, Tray, Card, and the standings row recipe from the match
+board; the Bookie's pinned row sits on `--plate` (the villain's dark plate,
+same role as the sponsor board). No new tokens.
 
 Motion additions: `bowl-orbit` (90s linear, gated on
 `prefers-reduced-motion: no-preference` so reduced motion holds badges at

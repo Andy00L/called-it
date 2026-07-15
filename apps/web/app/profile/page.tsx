@@ -16,6 +16,7 @@ import { IdentityCard } from '../../components/profile/identity-card';
 import { StatsCards } from '../../components/profile/stats-cards';
 import { BookieDuel } from '../../components/profile/bookie-duel';
 import { CalibrationCard } from '../../components/profile/calibration-card';
+import { TournamentCard } from '../../components/profile/tournament-card';
 import { WalletClaim, WalletRestore } from '../../components/profile/wallet-claim';
 
 type ProfileView =
@@ -210,6 +211,7 @@ function ProfileBody({
           />
           <BookieDuel bookie={profile.bookie} />
           <CalibrationCard profile={profile} />
+          <TournamentCard profile={profile} />
         </>
       )}
     </div>

@@ -277,6 +277,34 @@ export interface FixtureLeaderboardEntry {
   fixturePoints: number;
 }
 
+/** One private group room scoped to a fixture (the terrace). */
+export interface TerraceRoom {
+  /** Six-character invite code (also the share link path, /t/:code). */
+  code: string;
+  fixtureId: number;
+  name: string;
+  memberCount: number;
+  createdAtMs: number;
+}
+
+/**
+ * One row of a terrace standings board. The Bookie rides every terrace as
+ * the house rival: its row carries playerId null and isBookie true, and its
+ * points sum the ghost mirrors of the members' picks on this fixture.
+ */
+export interface TerraceStandingsEntry {
+  playerId: string | null;
+  handle: string;
+  fixturePoints: number;
+  isBookie: boolean;
+}
+
+/** GET /terraces/:code response; create and join return the same shape. */
+export interface TerraceStandingsPayload {
+  room: TerraceRoom;
+  entries: TerraceStandingsEntry[];
+}
+
 /** GET /profile/:playerId response: the skill profile. */
 export interface ProfilePayload {
   playerId: string;

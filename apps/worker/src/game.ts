@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   calibrationBuckets,
   computeBookieMargin,
@@ -24,6 +24,8 @@ import type {
   NearMissNotice,
   ProfilePayload,
   SettlementNotice,
+  TerraceStandingsEntry,
+  TerraceStandingsPayload,
 } from '@calledit/contracts';
 import type {
   FixtureLeaderboardEntry,
@@ -31,10 +33,12 @@ import type {
   PersistencePort,
   PickRecord,
   PlayerRecord,
+  TerraceRecord,
 } from './persistence.js';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_TERRACE_CODE_TAKEN,
   PERSISTENCE_ERROR_WALLET_TAKEN,
 } from './persistence.js';
 import { getMatchState, isInRunning, type MatchState, type MatchStateStore } from './state.js';
@@ -70,6 +74,22 @@ const HANDLE_PATTERN = /^[\p{L}\p{N} _.-]{2,24}$/u;
 // Impersonating the ghost opponent would corrupt the product story.
 const RESERVED_HANDLES = ['the bookie'];
 
+// Terrace codes: 6 chars from an alphabet without lookalike glyphs (no I, L,
+// O, 0, 1), so a code read aloud in a group chat types back correctly
+// (mirrors the terraces.code check constraint in 0005_terraces.sql).
+const TERRACE_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const TERRACE_CODE_LENGTH = 6;
+const TERRACE_CODE_PATTERN = new RegExp(`^[${TERRACE_CODE_ALPHABET}]{${TERRACE_CODE_LENGTH}}$`);
+
+// Collision retries at creation; 31^6 codes make a second collision rare.
+const TERRACE_CODE_ATTEMPTS = 5;
+
+// Membership cap per room (product choice: a group chat, not a stadium).
+const TERRACE_MEMBER_LIMIT = 40;
+
+// Displayed as the terrace's house rival row (playerId null, isBookie true).
+const BOOKIE_DISPLAY_HANDLE = 'The Bookie';
+
 // Wire-visible shapes live in the shared contract; re-exported for existing
 // import sites (tests, main).
 export type { GuestSession, LockResult, ProfilePayload, SettlementNotice };
@@ -83,6 +103,9 @@ export interface GameServiceDeps {
   onSettlement?: (notice: SettlementNotice) => void;
   /** Called when a missed window's event arrives just late (SSE fan-out). */
   onNearMiss?: (notice: NearMissNotice) => void;
+  /** Fixture existence check for terrace creation (the catalog knows
+   *  upcoming fixtures; match state only exists once the feed streams). */
+  isKnownFixture?: (fixtureId: number) => boolean;
   /** Injectable clock for tests; defaults to Date.now. */
   nowMs?: () => number;
 }
@@ -129,6 +152,21 @@ export interface GameService {
     rawNonce: unknown,
     rawSignature: unknown,
   ): Promise<Result<GuestSession, string>>;
+  /** Open a terrace for a fixture; the creator joins as the first member. */
+  createTerrace(
+    rawPlayerId: unknown,
+    rawPlayerToken: unknown,
+    rawFixtureId: unknown,
+    rawName: unknown,
+  ): Promise<Result<TerraceStandingsPayload, string>>;
+  /** Join a terrace by invite code (idempotent for existing members). */
+  joinTerrace(
+    rawPlayerId: unknown,
+    rawPlayerToken: unknown,
+    rawCode: unknown,
+  ): Promise<Result<TerraceStandingsPayload, string>>;
+  /** Public read of a terrace board (standings carry no secrets). */
+  terraceStandings(rawCode: unknown): Promise<Result<TerraceStandingsPayload, string>>;
   pendingPickCount(): number;
 }
 
@@ -205,6 +243,77 @@ export function createGameService(deps: GameServiceDeps): GameService {
       return err('auth_failed');
     }
     return ok(fetched.value);
+  };
+
+  const generateTerraceCode = (): string => {
+    let code = '';
+    for (let position = 0; position < TERRACE_CODE_LENGTH; position += 1) {
+      code += TERRACE_CODE_ALPHABET[randomInt(TERRACE_CODE_ALPHABET.length)] ?? '';
+    }
+    return code;
+  };
+
+  const normalizeTerraceCode = (rawCode: unknown): string | null => {
+    if (typeof rawCode !== 'string') {
+      return null;
+    }
+    const code = rawCode.trim().toUpperCase();
+    return TERRACE_CODE_PATTERN.test(code) ? code : null;
+  };
+
+  /** Assemble one terrace board: members ranked by fixture points, then the
+   *  Bookie pinned last (the row to beat, never ranked). */
+  const buildTerraceStandings = async (
+    terrace: TerraceRecord,
+  ): Promise<Result<TerraceStandingsPayload, string>> => {
+    const members = await deps.persistence.listTerraceMembers(terrace.code);
+    if (!members.ok) {
+      return members;
+    }
+    const memberIds = members.value.map((member) => member.playerId);
+    const points = await deps.persistence.fixturePointsForPlayers(terrace.fixtureId, memberIds);
+    if (!points.ok) {
+      return points;
+    }
+    const bookiePoints = await deps.persistence.bookieFixturePointsAgainstPlayers(
+      terrace.fixtureId,
+      memberIds,
+    );
+    if (!bookiePoints.ok) {
+      return bookiePoints;
+    }
+    const pointsByPlayerId = new Map(
+      points.value.map((entry) => [entry.playerId, entry.fixturePoints]),
+    );
+    const memberEntries: TerraceStandingsEntry[] = members.value
+      .map((member) => ({
+        playerId: member.playerId,
+        handle: member.handle,
+        fixturePoints: pointsByPlayerId.get(member.playerId) ?? 0,
+        isBookie: false,
+      }))
+      .sort(
+        (left, right) =>
+          right.fixturePoints - left.fixturePoints || left.handle.localeCompare(right.handle),
+      );
+    return ok({
+      room: {
+        code: terrace.code,
+        fixtureId: terrace.fixtureId,
+        name: terrace.name,
+        memberCount: members.value.length,
+        createdAtMs: terrace.createdAtMs,
+      },
+      entries: [
+        ...memberEntries,
+        {
+          playerId: null,
+          handle: BOOKIE_DISPLAY_HANDLE,
+          fixturePoints: bookiePoints.value,
+          isBookie: true,
+        },
+      ],
+    });
   };
 
   const buildCatalog = (state: MatchState): CallOption[] =>
@@ -653,6 +762,118 @@ export function createGameService(deps: GameServiceDeps): GameService {
         return rotated;
       }
       return ok({ playerId: found.value.id, playerToken, handle: found.value.handle });
+    },
+
+    createTerrace: async (rawPlayerId, rawPlayerToken, rawFixtureId, rawName) => {
+      if (typeof rawPlayerId !== 'string' || typeof rawPlayerToken !== 'string') {
+        return err('auth_failed');
+      }
+      const fixtureId =
+        typeof rawFixtureId === 'number' ? rawFixtureId : Number.parseInt(String(rawFixtureId), 10);
+      if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+        return err('invalid_fixture_id');
+      }
+      let providedName: string | null = null;
+      if (rawName !== undefined && rawName !== null && rawName !== '') {
+        if (typeof rawName !== 'string' || !HANDLE_PATTERN.test(rawName.trim())) {
+          return err('invalid_terrace_name: 2 to 24 letters, numbers, spaces, _ . -');
+        }
+        providedName = rawName.trim();
+        if (RESERVED_HANDLES.includes(providedName.toLowerCase())) {
+          return err('invalid_terrace_name: reserved name');
+        }
+      }
+      const authenticated = await authenticate(rawPlayerId, rawPlayerToken);
+      if (!authenticated.ok) {
+        return authenticated;
+      }
+      if (deps.isKnownFixture !== undefined && !deps.isKnownFixture(fixtureId)) {
+        return err('unknown_fixture');
+      }
+
+      let code = '';
+      let created: Result<void, string> | null = null;
+      for (let attempt = 0; attempt < TERRACE_CODE_ATTEMPTS; attempt += 1) {
+        code = generateTerraceCode();
+        created = await deps.persistence.createTerrace({
+          code,
+          fixtureId,
+          name: providedName ?? `Terrace ${code}`,
+          ownerPlayerId: authenticated.value.id,
+          createdAtMs: nowMs(),
+        });
+        if (created.ok || !created.error.startsWith(PERSISTENCE_ERROR_TERRACE_CODE_TAKEN)) {
+          break;
+        }
+      }
+      if (created === null || !created.ok) {
+        return created ?? err('terrace_create_failed');
+      }
+      const joined = await deps.persistence.addTerraceMember(code, authenticated.value.id);
+      if (!joined.ok) {
+        return joined;
+      }
+      const terrace = await deps.persistence.getTerrace(code);
+      if (!terrace.ok) {
+        return terrace;
+      }
+      if (terrace.value === null) {
+        return err('unknown_terrace');
+      }
+      return buildTerraceStandings(terrace.value);
+    },
+
+    joinTerrace: async (rawPlayerId, rawPlayerToken, rawCode) => {
+      if (typeof rawPlayerId !== 'string' || typeof rawPlayerToken !== 'string') {
+        return err('auth_failed');
+      }
+      const code = normalizeTerraceCode(rawCode);
+      if (code === null) {
+        return err('invalid_terrace_code');
+      }
+      const authenticated = await authenticate(rawPlayerId, rawPlayerToken);
+      if (!authenticated.ok) {
+        return authenticated;
+      }
+      const terrace = await deps.persistence.getTerrace(code);
+      if (!terrace.ok) {
+        return terrace;
+      }
+      if (terrace.value === null) {
+        return err('unknown_terrace');
+      }
+      const members = await deps.persistence.listTerraceMembers(code);
+      if (!members.ok) {
+        return members;
+      }
+      const isMember = members.value.some(
+        (member) => member.playerId === authenticated.value.id,
+      );
+      if (!isMember && members.value.length >= TERRACE_MEMBER_LIMIT) {
+        return err('terrace_full');
+      }
+      if (!isMember) {
+        const joined = await deps.persistence.addTerraceMember(code, authenticated.value.id);
+        if (!joined.ok) {
+          return joined;
+        }
+      }
+      return buildTerraceStandings(terrace.value);
+    },
+
+    terraceStandings: async (rawCode) => {
+      const code = normalizeTerraceCode(rawCode);
+      if (code === null) {
+        return err('invalid_terrace_code');
+      }
+      const terrace = await deps.persistence.getTerrace(code);
+      if (!terrace.ok) {
+        return terrace;
+      }
+      if (terrace.value === null) {
+        return err('unknown_terrace');
+      }
+      return buildTerraceStandings(terrace.value);
     },
 
     pendingPickCount: () => {

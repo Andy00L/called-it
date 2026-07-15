@@ -266,9 +266,13 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
   };
 
-  /** Bucket a POST by cost; guest creation is the strict one. */
+  /** Bucket a POST by cost: guest creation and terrace creation both write
+   *  a durable row per call, so they share the strict bucket. */
   const rateLimiterForPost = (segments: string[]): RateLimiter =>
-    segments[0] === 'players' && segments[1] === 'guest' ? guestRateLimiter : actionRateLimiter;
+    (segments[0] === 'players' && segments[1] === 'guest') ||
+    (segments[0] === 'terraces' && segments.length === 1)
+      ? guestRateLimiter
+      : actionRateLimiter;
 
   const routeRequest = async (
     request: IncomingMessage,
@@ -374,7 +378,7 @@ export function createFanout(deps: FanoutDeps): Fanout {
     }
     sendJson(response, 404, {
       error:
-        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /leaderboard/:fixtureId, /profile/:playerId, /receipts/:pickId, POST /players/guest, POST /players/handle, POST /picks, GET /replay/tapes, POST /replay/sessions, GET /replay/sessions/:sessionId/live',
+        'unknown route; use /health, /fixtures, /state/:fixtureId, /live/:fixtureId, /leaderboard, /leaderboard/:fixtureId, /profile/:playerId, /receipts/:pickId, /terraces/:code, POST /players/guest, POST /players/handle, POST /picks, POST /terraces, GET /replay/tapes, POST /replay/sessions, GET /replay/sessions/:sessionId/live',
     });
   };
 

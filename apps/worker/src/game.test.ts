@@ -736,3 +736,140 @@ test('duel stats count settled human picks against their Bookie mirrors', async 
   // The ghost mirrored the same favored corner window, so it settled too.
   assert.equal(afterSettlement.value.bookieSettled, 1);
 });
+
+test('terrace creation validates input, gates auth, and seats the creator', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 904, 600);
+  const guest = await createGuest(harness, 'room owner');
+
+  const badToken = await harness.game.createTerrace(guest.playerId, 'wrong', 904, undefined);
+  assert.ok(!badToken.ok && badToken.error === 'auth_failed');
+
+  const badFixture = await harness.game.createTerrace(guest.playerId, guest.playerToken, -3, undefined);
+  assert.ok(!badFixture.ok && badFixture.error === 'invalid_fixture_id');
+
+  const badName = await harness.game.createTerrace(guest.playerId, guest.playerToken, 904, '!');
+  assert.ok(!badName.ok && badName.error.startsWith('invalid_terrace_name'));
+
+  const reservedName = await harness.game.createTerrace(
+    guest.playerId,
+    guest.playerToken,
+    904,
+    'The Bookie',
+  );
+  assert.ok(!reservedName.ok && reservedName.error === 'invalid_terrace_name: reserved name');
+
+  const created = await harness.game.createTerrace(guest.playerId, guest.playerToken, 904, undefined);
+  assert.ok(created.ok);
+  assert.equal(created.value.room.fixtureId, 904);
+  assert.equal(created.value.room.memberCount, 1);
+  assert.match(created.value.room.code, /^[A-HJKMNP-Z2-9]{6}$/);
+  assert.equal(created.value.room.name, `Terrace ${created.value.room.code}`);
+  // Creator with 0 points, then the Bookie pinned last.
+  assert.equal(created.value.entries.length, 2);
+  assert.equal(created.value.entries[0]?.handle, 'room owner');
+  assert.equal(created.value.entries[0]?.fixturePoints, 0);
+  assert.equal(created.value.entries[1]?.isBookie, true);
+  assert.equal(created.value.entries[1]?.playerId, null);
+});
+
+test('terrace creation refuses a fixture the catalog does not know', async () => {
+  const store = createMatchStateStore();
+  const game = createGameService({
+    persistence: createMemoryPersistence(),
+    store,
+    walletVerifier: createWalletVerifier(),
+    isKnownFixture: (fixtureId) => fixtureId === 905,
+  });
+  const created = await game.createGuestPlayer('gatekeeper');
+  assert.ok(created.ok);
+  const refused = await game.createTerrace(
+    created.value.playerId,
+    created.value.playerToken,
+    906,
+    undefined,
+  );
+  assert.ok(!refused.ok && refused.error === 'unknown_fixture');
+});
+
+test('joining a terrace is idempotent, case-insensitive, and capped', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 907, 600);
+  const owner = await createGuest(harness, 'room owner');
+  const created = await harness.game.createTerrace(owner.playerId, owner.playerToken, 907, 'The lads');
+  assert.ok(created.ok);
+  const code = created.value.room.code;
+
+  const friend = await createGuest(harness, 'friend one');
+  const joined = await harness.game.joinTerrace(
+    friend.playerId,
+    friend.playerToken,
+    ` ${code.toLowerCase()} `,
+  );
+  assert.ok(joined.ok);
+  assert.equal(joined.value.room.memberCount, 2);
+
+  // Joining again changes nothing.
+  const rejoined = await harness.game.joinTerrace(friend.playerId, friend.playerToken, code);
+  assert.ok(rejoined.ok);
+  assert.equal(rejoined.value.room.memberCount, 2);
+
+  const unknown = await harness.game.joinTerrace(friend.playerId, friend.playerToken, 'ZZZZZ9');
+  assert.ok(!unknown.ok && unknown.error === 'unknown_terrace');
+
+  const malformed = await harness.game.joinTerrace(friend.playerId, friend.playerToken, 'nope');
+  assert.ok(!malformed.ok && malformed.error === 'invalid_terrace_code');
+
+  // Fill to the 40-member cap; member 41 is refused, existing members re-enter.
+  for (let seat = 2; seat < 40; seat += 1) {
+    const filler = await createGuest(harness, `filler ${seat}`);
+    const seated = await harness.game.joinTerrace(filler.playerId, filler.playerToken, code);
+    assert.ok(seated.ok);
+  }
+  const overflow = await createGuest(harness, 'too late');
+  const refused = await harness.game.joinTerrace(overflow.playerId, overflow.playerToken, code);
+  assert.ok(!refused.ok && refused.error === 'terrace_full');
+  const memberAgain = await harness.game.joinTerrace(friend.playerId, friend.playerToken, code);
+  assert.ok(memberAgain.ok);
+});
+
+test('terrace standings rank members by fixture points with the Bookie pinned last', async () => {
+  const harness = createHarness();
+  primeLiveMatch(harness, 908, 600);
+  const owner = await createGuest(harness, 'room owner');
+  const created = await harness.game.createTerrace(owner.playerId, owner.playerToken, 908, undefined);
+  assert.ok(created.ok);
+  const code = created.value.room.code;
+
+  const friend = await createGuest(harness, 'friend one');
+  const joined = await harness.game.joinTerrace(friend.playerId, friend.playerToken, code);
+  assert.ok(joined.ok);
+
+  // The friend hits a corner call; the ghost mirror settles alongside it.
+  const cornerOption = optionOf(catalogFor(harness, 908), 'corner');
+  const locked = await harness.game.lockPick(friend.playerId, friend.playerToken, 908, cornerOption.id);
+  assert.ok(locked.ok);
+  pushScores(harness, {
+    FixtureId: 908,
+    Action: 'corner',
+    Confirmed: true,
+    Participant: 1,
+    Clock: { Running: true, Seconds: 700 },
+  });
+  await harness.game.resolveFixture(908);
+
+  const standings = await harness.game.terraceStandings(code);
+  assert.ok(standings.ok);
+  assert.equal(standings.value.entries.length, 3);
+  // Scorer first, 0-point owner second, the Bookie last with its mirror points.
+  assert.equal(standings.value.entries[0]?.handle, 'friend one');
+  assert.equal(standings.value.entries[0]?.fixturePoints, cornerOption.potentialPoints);
+  assert.equal(standings.value.entries[1]?.handle, 'room owner');
+  assert.equal(standings.value.entries[1]?.fixturePoints, 0);
+  const bookieRow = standings.value.entries[2];
+  assert.ok(bookieRow !== undefined && bookieRow.isBookie);
+  assert.ok(bookieRow.fixturePoints > 0);
+
+  const publicRead = await harness.game.terraceStandings(code.toLowerCase());
+  assert.ok(publicRead.ok);
+});

@@ -17,10 +17,11 @@ export default async function MatchPage({
   searchParams,
 }: {
   params: Promise<{ fixtureId: string }>;
-  searchParams: Promise<{ sponsor?: string | string[] }>;
+  searchParams: Promise<{ sponsor?: string | string[]; terrace?: string | string[] }>;
 }) {
   const { fixtureId: rawFixtureId } = await params;
-  const { sponsor } = await searchParams;
+  const { sponsor, terrace } = await searchParams;
+  const terraceCode = typeof terrace === 'string' && terrace !== '' ? terrace : null;
   const fixtureId = Number.parseInt(rawFixtureId, 10);
   if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
     notFound();
@@ -46,6 +47,7 @@ export default async function MatchPage({
         competition={fixture?.competition ?? 'World Cup'}
         startTimeMs={fixture?.startTimeMs ?? 0}
         sponsorName={resolveSponsorName(sponsor)}
+        terraceCode={terraceCode}
       />
     </BroadcastShell>
   );

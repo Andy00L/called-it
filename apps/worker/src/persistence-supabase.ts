@@ -4,10 +4,12 @@ import { err, ok, type Result } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_TERRACE_CODE_TAKEN,
   PERSISTENCE_ERROR_TX_USED,
   PERSISTENCE_ERROR_WALLET_TAKEN,
   type CommitmentRecord,
   type FixtureLeaderboardEntry,
+  type FixturePointsEntry,
   type LeaderboardEntry,
   type PersistencePort,
   type PickRecord,
@@ -16,6 +18,7 @@ import {
   type SettledPickView,
   type SettlementInput,
   type SponsorRecord,
+  type TerraceRecord,
 } from './persistence.js';
 
 /**
@@ -98,6 +101,25 @@ function sponsorFromRow(row: SponsorRow): SponsorRecord {
     createdAtMs: Date.parse(row.created_at),
     startsAtMs: row.starts_at === null ? null : Date.parse(row.starts_at),
     endsAtMs: row.ends_at === null ? null : Date.parse(row.ends_at),
+  };
+}
+
+/** terraces table row (sourceRef: db/migrations/0005_terraces.sql). */
+interface TerraceRow {
+  code: string;
+  fixture_id: number;
+  name: string;
+  owner_player_id: string;
+  created_at: string;
+}
+
+function terraceFromRow(row: TerraceRow): TerraceRecord {
+  return {
+    code: row.code,
+    fixtureId: row.fixture_id,
+    name: row.name,
+    ownerPlayerId: row.owner_player_id,
+    createdAtMs: Date.parse(row.created_at),
   };
 }
 
@@ -671,6 +693,143 @@ export function createSupabasePersistence(url: string, secretKey: string): Persi
         }
       }
       return ok(stats);
+    },
+
+    createTerrace: async (record) => {
+      const { error } = await client.from('terraces').insert({
+        code: record.code,
+        fixture_id: record.fixtureId,
+        name: record.name,
+        owner_player_id: record.ownerPlayerId,
+        created_at: new Date(record.createdAtMs).toISOString(),
+      });
+      if (error !== null) {
+        if (error.code === POSTGRES_UNIQUE_VIOLATION) {
+          return err(`${PERSISTENCE_ERROR_TERRACE_CODE_TAKEN}: ${record.code}`);
+        }
+        return err(`terrace insert failed (run 0005_terraces.sql?): ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
+    getTerrace: async (code) => {
+      const { data, error } = await client
+        .from('terraces')
+        .select('*')
+        .eq('code', code)
+        .maybeSingle();
+      if (error !== null) {
+        return err(`terrace select failed (run 0005_terraces.sql?): ${error.message}`);
+      }
+      return ok(data === null ? null : terraceFromRow(data as TerraceRow));
+    },
+
+    addTerraceMember: async (code, playerId) => {
+      // Upsert on the composite key makes the join idempotent.
+      const { error } = await client
+        .from('terrace_members')
+        .upsert(
+          { terrace_code: code, player_id: playerId },
+          { onConflict: 'terrace_code,player_id', ignoreDuplicates: true },
+        );
+      if (error !== null) {
+        return err(`terrace member insert failed: ${error.message}`);
+      }
+      return ok(undefined);
+    },
+
+    listTerraceMembers: async (code) => {
+      const memberRows = await client
+        .from('terrace_members')
+        .select('player_id')
+        .eq('terrace_code', code)
+        .order('joined_at', { ascending: true });
+      if (memberRows.error !== null) {
+        return err(`terrace members select failed: ${memberRows.error.message}`);
+      }
+      const memberIds = ((memberRows.data ?? []) as Array<{ player_id: string }>).map(
+        (row) => row.player_id,
+      );
+      if (memberIds.length === 0) {
+        return ok([]);
+      }
+      const handleRows = await client
+        .from('players')
+        .select('id, handle')
+        .in('id', memberIds);
+      if (handleRows.error !== null) {
+        return err(`terrace member handles select failed: ${handleRows.error.message}`);
+      }
+      const handleByPlayerId = new Map(
+        ((handleRows.data ?? []) as Array<{ id: string; handle: string }>).map((row) => [
+          row.id,
+          row.handle,
+        ]),
+      );
+      return ok(
+        memberIds.map((playerId) => ({
+          playerId,
+          handle: handleByPlayerId.get(playerId) ?? 'unknown',
+        })),
+      );
+    },
+
+    fixturePointsForPlayers: async (fixtureId, playerIds) => {
+      if (playerIds.length === 0) {
+        return ok([]);
+      }
+      const { data, error } = await client
+        .from('leaderboard_fixture')
+        .select('player_id, fixture_points')
+        .eq('fixture_id', fixtureId)
+        .in('player_id', [...playerIds]);
+      if (error !== null) {
+        return err(`fixture points select failed: ${error.message}`);
+      }
+      const rows = (data ?? []) as Array<{ player_id: string; fixture_points: number }>;
+      const entries: FixturePointsEntry[] = rows.map((row) => ({
+        playerId: row.player_id,
+        fixturePoints: Number(row.fixture_points),
+      }));
+      return ok(entries);
+    },
+
+    bookieFixturePointsAgainstPlayers: async (fixtureId, playerIds) => {
+      if (playerIds.length === 0) {
+        return ok(0);
+      }
+      const memberPicks = await client
+        .from('picks')
+        .select('id')
+        .eq('fixture_id', fixtureId)
+        .eq('is_bookie', false)
+        .in('player_id', [...playerIds]);
+      if (memberPicks.error !== null) {
+        return err(`terrace member picks select failed: ${memberPicks.error.message}`);
+      }
+      const memberPickIds = ((memberPicks.data ?? []) as Array<{ id: string }>).map(
+        (row) => row.id,
+      );
+      if (memberPickIds.length === 0) {
+        return ok(0);
+      }
+      const ghostPicks = await client
+        .from('picks')
+        .select('id')
+        .eq('is_bookie', true)
+        .in('bookie_of_pick_id', memberPickIds)
+        .neq('status', 'pending');
+      if (ghostPicks.error !== null) {
+        return err(`terrace ghost picks select failed: ${ghostPicks.error.message}`);
+      }
+      const ghostIds = ((ghostPicks.data ?? []) as Array<{ id: string }>).map((row) => row.id);
+      const settlements = await fetchSettlements(ghostIds);
+      if (!settlements.ok) {
+        return settlements;
+      }
+      return ok(
+        settlements.value.reduce((total, row) => total + row.points_awarded, 0),
+      );
     },
 
     listSettledBookiePicksAgainstPlayer: async (playerId) => {

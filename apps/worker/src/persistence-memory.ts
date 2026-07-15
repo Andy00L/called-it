@@ -2,10 +2,12 @@ import { err, ok } from '@calledit/txline';
 import {
   PERSISTENCE_ERROR_DUPLICATE_CATEGORY,
   PERSISTENCE_ERROR_NOT_PENDING,
+  PERSISTENCE_ERROR_TERRACE_CODE_TAKEN,
   PERSISTENCE_ERROR_TX_USED,
   PERSISTENCE_ERROR_WALLET_TAKEN,
   type CommitmentRecord,
   type FixtureLeaderboardEntry,
+  type FixturePointsEntry,
   type LeaderboardEntry,
   type PersistencePort,
   type PickRecord,
@@ -13,6 +15,7 @@ import {
   type SettledPickView,
   type SettlementInput,
   type SponsorRecord,
+  type TerraceRecord,
 } from './persistence.js';
 import type { MerkleProofStep } from '@calledit/contracts';
 
@@ -42,6 +45,9 @@ export function createMemoryPersistence(): PersistencePort {
   const commitments = new Map<string, CommitmentRecord>();
   const commitmentLinksByPickId = new Map<string, PickCommitmentLink>();
   const sponsors = new Map<string, SponsorRecord>();
+  const terraces = new Map<string, TerraceRecord>();
+  /** code -> member player ids; Set keeps join order (insertion order). */
+  const terraceMembersByCode = new Map<string, Set<string>>();
 
   const hasPendingInCategory = (candidate: PickRecord): boolean => {
     for (const existing of picks.values()) {
@@ -374,6 +380,96 @@ export function createMemoryPersistence(): PersistencePort {
         }
       }
       return ok(stats);
+    },
+
+    createTerrace: async (record) => {
+      if (terraces.has(record.code)) {
+        return err(`${PERSISTENCE_ERROR_TERRACE_CODE_TAKEN}: ${record.code}`);
+      }
+      terraces.set(record.code, { ...record });
+      return ok(undefined);
+    },
+
+    getTerrace: async (code) => {
+      const record = terraces.get(code);
+      return ok(record === undefined ? null : { ...record });
+    },
+
+    addTerraceMember: async (code, playerId) => {
+      if (!terraces.has(code)) {
+        return err(`terrace member insert failed: unknown terrace ${code}`);
+      }
+      const members = terraceMembersByCode.get(code) ?? new Set<string>();
+      members.add(playerId);
+      terraceMembersByCode.set(code, members);
+      return ok(undefined);
+    },
+
+    listTerraceMembers: async (code) => {
+      const members = terraceMembersByCode.get(code) ?? new Set<string>();
+      return ok(
+        [...members].map((playerId) => ({
+          playerId,
+          handle: players.get(playerId)?.handle ?? 'unknown',
+        })),
+      );
+    },
+
+    fixturePointsForPlayers: async (fixtureId, playerIds) => {
+      const wantedIds = new Set(playerIds);
+      const totalsByPlayerId = new Map<string, number>();
+      for (const pick of picks.values()) {
+        if (
+          pick.isBookie ||
+          pick.fixtureId !== fixtureId ||
+          pick.playerId === null ||
+          !wantedIds.has(pick.playerId)
+        ) {
+          continue;
+        }
+        const view = settledViewOf(pick);
+        if (view === null) {
+          continue;
+        }
+        totalsByPlayerId.set(
+          pick.playerId,
+          (totalsByPlayerId.get(pick.playerId) ?? 0) + view.pointsAwarded,
+        );
+      }
+      const entries: FixturePointsEntry[] = [...totalsByPlayerId].map(
+        ([playerId, fixturePoints]) => ({ playerId, fixturePoints }),
+      );
+      return ok(entries);
+    },
+
+    bookieFixturePointsAgainstPlayers: async (fixtureId, playerIds) => {
+      const wantedIds = new Set(playerIds);
+      const memberPickIds = new Set<string>();
+      for (const pick of picks.values()) {
+        if (
+          !pick.isBookie &&
+          pick.fixtureId === fixtureId &&
+          pick.playerId !== null &&
+          wantedIds.has(pick.playerId)
+        ) {
+          memberPickIds.add(pick.id);
+        }
+      }
+      let bookiePoints = 0;
+      for (const pick of picks.values()) {
+        if (
+          !pick.isBookie ||
+          pick.bookieOfPickId === null ||
+          !memberPickIds.has(pick.bookieOfPickId)
+        ) {
+          continue;
+        }
+        const view = settledViewOf(pick);
+        if (view !== null) {
+          bookiePoints += view.pointsAwarded;
+        }
+      }
+      return ok(bookiePoints);
     },
 
     listSettledBookiePicksAgainstPlayer: async (playerId) => {

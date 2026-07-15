@@ -113,6 +113,17 @@ function statusForSponsorError(code: string): number {
   return 500;
 }
 
+/** Terrace error codes onto HTTP statuses; game codes fall through. */
+function statusForTerraceError(code: string): number {
+  if (code === 'unknown_terrace') {
+    return 404;
+  }
+  if (code === 'terrace_full') {
+    return 409;
+  }
+  return statusForGameError(code);
+}
+
 interface ReceiptSource {
   buildReceipt(pickId: string): Promise<Result<ReceiptPayload | null, string>>;
 }
@@ -280,6 +291,43 @@ function buildApiHandler(
       }
     }
 
+    if (segments[0] === 'terraces') {
+      if (method === 'POST' && segments.length === 1) {
+        const record = asRecord(body);
+        const created = await game.createTerrace(
+          firstHeaderValue(headers['x-player-id']),
+          firstHeaderValue(headers['x-player-token']),
+          record['fixtureId'],
+          record['name'],
+        );
+        if (!created.ok) {
+          return { status: statusForTerraceError(created.error), body: { error: created.error } };
+        }
+        return { status: 200, body: created.value };
+      }
+      if (method === 'POST' && segments.length === 3 && segments[2] === 'join') {
+        const joined = await game.joinTerrace(
+          firstHeaderValue(headers['x-player-id']),
+          firstHeaderValue(headers['x-player-token']),
+          segments[1],
+        );
+        if (!joined.ok) {
+          return { status: statusForTerraceError(joined.error), body: { error: joined.error } };
+        }
+        return { status: 200, body: joined.value };
+      }
+      if (method === 'GET' && segments.length === 2) {
+        const standings = await game.terraceStandings(segments[1]);
+        if (!standings.ok) {
+          return {
+            status: statusForTerraceError(standings.error),
+            body: { error: standings.error },
+          };
+        }
+        return { status: 200, body: standings.value };
+      }
+    }
+
     if (method === 'GET' && segments.length === 2 && segments[0] === 'stats' && segments[1] === 'duel') {
       const stats = await game.duelStats();
       if (!stats.ok) {
@@ -420,6 +468,10 @@ async function main(): Promise<void> {
     persistence,
     store,
     walletVerifier,
+    // Terraces open before kickoff, so existence checks read the catalog
+    // (upcoming fixtures included), not just the live match states.
+    isKnownFixture: (fixtureId) =>
+      fixtureCatalog.listFixtures().some((fixture) => fixture.FixtureId === fixtureId),
     onSettlement: (notice) => {
       fanout.broadcastEvent(notice.fixtureId, 'settlement', notice);
     },

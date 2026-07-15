@@ -35,6 +35,8 @@ import { MatchBoard } from './match-board';
 import { ReplayRibbon } from './replay-ribbon';
 import { SettlementLayer } from './settlement-layer';
 import { NearMissLayer } from './near-miss-layer';
+import { HalfTimeReport } from './half-time-report';
+import { TerracePanel } from '../terrace/terrace-panel';
 import { FinalEditionCard, type SettledRow } from './final-edition';
 import { HowItWorks } from '../onboarding/how-it-works';
 import { formatClockMinutes } from '../../lib/format';
@@ -157,6 +159,7 @@ export function MatchScreen({
   competition,
   startTimeMs,
   sponsorName,
+  terraceCode = null,
 }: {
   mode: MatchScreenMode;
   participant1: string;
@@ -165,6 +168,8 @@ export function MatchScreen({
   startTimeMs: number;
   /** Resolved match sponsor (the ?sponsor= demo); rides all three surfaces. */
   sponsorName: string;
+  /** Group room code from ?terrace=; null renders the invite card instead. */
+  terraceCode?: string | null;
 }) {
   const channelPath =
     mode.kind === 'live' ? `/live/${mode.fixtureId}` : `/replay/sessions/${mode.sessionId}/live`;
@@ -416,6 +421,24 @@ export function MatchScreen({
   const myNearMisses = nearMisses.filter(
     (notice) => mode.kind === 'replay' || settledPickIds.has(notice.pickId),
   );
+  // The Bookie mirrors every human pick (bookieOfPickId); its settlements
+  // ride the same channel, so the half-time duel line tallies the mirrors of
+  // MY picks. Replays are private: every mirror on the channel is mine.
+  const myPickIds = new Set([
+    ...[...lockedByCategory.values()].map((entry) => entry.pick.id),
+    ...restoredEntries.map((entry) => entry.pick.id),
+  ]);
+  const bookieMirrorNotices = settlements.filter(
+    (notice) =>
+      notice.pick.isBookie &&
+      (mode.kind === 'replay' ||
+        (notice.pick.bookieOfPickId !== null && myPickIds.has(notice.pick.bookieOfPickId))),
+  );
+  const bookieHalfTally = {
+    settled: bookieMirrorNotices.length,
+    hits: bookieMirrorNotices.filter((notice) => notice.outcome === 'hit').length,
+  };
+  const scoreLine = `${participant1} ${payload.goalsP1}-${payload.goalsP2} ${participant2}`;
 
   const callsSection =
     payload.phase === 'pre' ? (
@@ -611,6 +634,16 @@ export function MatchScreen({
           </div>
         ) : null}
 
+        {mode.kind === 'live' ? (
+          <div className="min-w-0 flex-[1_1_300px]">
+            <TerracePanel
+              fixtureId={mode.fixtureId}
+              initialCode={terraceCode}
+              settlementCount={settlements.length}
+            />
+          </div>
+        ) : null}
+
         <section aria-label="Event feed" className="bc-bronze min-w-0 flex-[1_1_300px] p-4.5">
           <Eyebrow>Event feed</Eyebrow>
           <div className="panel-paper mt-3">
@@ -632,6 +665,16 @@ export function MatchScreen({
         isReplay={mode.kind === 'replay'}
       />
       <NearMissLayer notices={myNearMisses} />
+      <HalfTimeReport
+        clockSeconds={displayClockSeconds}
+        phase={payload.phase}
+        rows={settledRows}
+        bookieTally={bookieHalfTally}
+        fixtureLine={fixtureLine}
+        scoreLine={scoreLine}
+        isReplay={mode.kind === 'replay'}
+        withReceiptLinks={mode.kind === 'live'}
+      />
     </div>
   );
 }

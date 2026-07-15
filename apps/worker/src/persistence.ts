@@ -89,6 +89,28 @@ export const PERSISTENCE_ERROR_DUPLICATE_CATEGORY = 'duplicate_category';
 export const PERSISTENCE_ERROR_NOT_PENDING = 'not_pending';
 export const PERSISTENCE_ERROR_WALLET_TAKEN = 'wallet_taken';
 export const PERSISTENCE_ERROR_TX_USED = 'tx_already_used';
+export const PERSISTENCE_ERROR_TERRACE_CODE_TAKEN = 'terrace_code_taken';
+
+/** One terrace room row (terraces table, 0005_terraces.sql). */
+export interface TerraceRecord {
+  code: string;
+  fixtureId: number;
+  name: string;
+  ownerPlayerId: string;
+  createdAtMs: number;
+}
+
+/** One terrace member with the display handle joined in. */
+export interface TerraceMemberEntry {
+  playerId: string;
+  handle: string;
+}
+
+/** One player's settled points on one fixture (terrace standings input). */
+export interface FixturePointsEntry {
+  playerId: string;
+  fixturePoints: number;
+}
 
 /** One self-serve sponsorship (sponsors table, 0004_sponsors.sql). */
 export interface SponsorRecord {
@@ -176,4 +198,23 @@ export interface PersistencePort {
   activateSponsor(input: SponsorActivationInput): Promise<Result<void, string>>;
   /** Active sponsorships whose window covers nowMs, heaviest first. */
   listActiveSponsors(nowMs: number): Promise<Result<SponsorRecord[], string>>;
+  /** Insert a terrace; `terrace_code_taken` when the code collides. */
+  createTerrace(record: TerraceRecord): Promise<Result<void, string>>;
+  getTerrace(code: string): Promise<Result<TerraceRecord | null, string>>;
+  /** Idempotent membership insert: joining twice is a no-op. */
+  addTerraceMember(code: string, playerId: string): Promise<Result<void, string>>;
+  /** Members with handles, oldest join first. */
+  listTerraceMembers(code: string): Promise<Result<TerraceMemberEntry[], string>>;
+  /** Settled fixture points for exactly the given players (0-point players
+   *  are simply absent; the caller fills the gaps). */
+  fixturePointsForPlayers(
+    fixtureId: number,
+    playerIds: readonly string[],
+  ): Promise<Result<FixturePointsEntry[], string>>;
+  /** The Bookie's settled points on ghost mirrors of the given players'
+   *  picks on one fixture (the terrace's house rival score). */
+  bookieFixturePointsAgainstPlayers(
+    fixtureId: number,
+    playerIds: readonly string[],
+  ): Promise<Result<number, string>>;
 }

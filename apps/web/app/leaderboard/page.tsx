@@ -7,6 +7,7 @@ import { PaperPanel } from '../../components/ui/surface';
 import { buttonClassName } from '../../components/ui/button-styles';
 import { BroadcastShell, BroadcastTopBar } from '../../components/ui/broadcast-shell';
 import { Standings } from '../../components/leaderboard/standings';
+import { JoinBoard } from '../../components/leaderboard/join-board';
 
 export const viewport: Viewport = {
   // sourceRef: docs/UI_DESIGN_SYSTEM.md, broadcast night field --cream.
@@ -60,6 +61,8 @@ export default async function LeaderboardPage() {
             )}
           </div>
         </PaperPanel>
+
+        <JoinBoard />
       </div>
     </BroadcastShell>
   );

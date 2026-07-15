@@ -21,15 +21,19 @@ Experiences track.
 ![network](https://img.shields.io/badge/network-Solana%20mainnet-12170F)
 ![data](https://img.shields.io/badge/data-TxLINE%20StablePrice%20SSE-1F6B2C)
 ![stack](https://img.shields.io/badge/stack-Next%2016%20%2B%20Node%2022%20%2B%20TS-12170F)
-![tests](https://img.shields.io/badge/tests-133%20passing-1F6B2C)
+![tests](https://img.shields.io/badge/tests-139%20passing-1F6B2C)
 ![app](https://img.shields.io/badge/app-live%20on%20Vercel-2C8C3C)
 ![proof](https://img.shields.io/badge/proof-Merkle%20memo%20on%20Solana-B87514)
 
-![The lobby: the tournament wheel behind the hero title, over the programme rail with final scores read from the tapes](docs/screenshots/01-lobby.png)
+![The lobby on semi-final night: the stadium bowl with eliminated teams marked OUT, the survivors carrying live prices, over the programme shelf with final scores read from the tapes](docs/screenshots/01-lobby.png)
 
 | The living pitch: both elevens, benches, live stat badges           | The proof: merkle VALID, oracle VERIFIED, anchored on Solana        |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | ![Kickoff XI on the pitch](docs/screenshots/02-pitch-xi.png)         | ![A public receipt](docs/screenshots/03-receipt.png)                 |
+
+| The half-time report: your first half vs The Bookie, printed at 45' | The terrace: a group room per match, The Bookie seated as the rival |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| ![The half-time report](docs/screenshots/04-half-time.png)           | ![A terrace board](docs/screenshots/05-terrace.png)                  |
 
 ## 🎯 The problem
 
@@ -56,6 +60,15 @@ anchors every pick on Solana so the proof survives the group chat.
 - **The Bookie, a ghost opponent.** Every call you make, a ghost named the Bookie
   makes the market-favorite version of. Your metric is your margin over the Bookie,
   and the lobby's duel line tallies fans against the ghost over the last 24 hours.
+- **The half-time report.** When the clock crosses 45', a mini receipt prints on its
+  own: your first-half hits against the Bookie's, plus your best call with its locked
+  probability. It only prints when you have a settled call, shares through the Web
+  Share sheet, and in replays it stamps REPLAY, NOT RANKED.
+- **The terrace: one link, a group room.** Any live match can open a terrace: a
+  6-character invite code (`/t/{code}`), a private per-match board capped at 40
+  seats, and the Bookie pinned at the bottom of every room as the row to beat (its
+  points sum the ghost mirrors of the members' own picks). Joining is one tap on a
+  guest identity; no account, no app.
 - **Provable receipts, live on mainnet.** Each locked pick is hashed into a Merkle
   tree and its root is posted through a Solana memo transaction on a 60 second batch,
   before the event resolves. The public receipt at `/r/{pickId}` carries the memo
@@ -69,21 +82,25 @@ anchors every pick on Solana so the proof survives the group chat.
   player in place, scorers wear a live ball badge, and every chip opens a player card
   with live counters and an attributed timeline ("115' Subbed on, 121' Goal"). A team
   stats view lists both full squads with counters updating in real time.
-- **The Time Machine and the programme rail.** The worker tapes every match
+- **The Time Machine and the programme shelf.** The worker tapes every match
   automatically; a finished match replays through the same state and game pipeline at
   1x, 10x, or 60x, with the same lock flow and settlements, session-scoped and off
-  the official leaderboard. Finished editions sit on the lobby's curved programme
-  rail with final scores read back from the tapes, under a tournament wheel that
-  marks eliminated teams OUT and prices the survivors' next match live.
+  the official leaderboard. Finished editions sit on the lobby's floodlit programme
+  shelf with final scores read back from the tapes, under a stadium bowl whose rim
+  carries every team: eliminated ones ride marked OUT, survivors carry their live
+  next-match price.
 - **Three sponsorship surfaces.** A named match reskin (`?sponsor=` demo), a sponsor
   line on shared receipts, and a self-serve board: anyone can buy ticker time in SOL
   at `/sponsor`, priced by duration, tier, and demand; the worker builds the unsigned
   transfer and verifies the payment on chain (amount, recipient, single-use memo)
   before the name rides the header boards.
-- **A measured skill profile.** Calibration buckets, edge versus the market, a Brier
-  score, streaks that multiply the next hit by 1.1 up to 3.0x, and a latency HUD
-  showing the measured feed-to-screen delay, because a real-time claim should carry
-  its own number.
+- **A measured skill profile and a tournament card.** Calibration buckets, edge
+  versus the market, a Brier score, streaks that multiply the next hit by 1.1 up to
+  3.0x, and a latency HUD showing the measured feed-to-screen delay. The profile
+  ends on a shareable tournament card printed from settled calls only: points, hit
+  rate, best streak, margin over the Bookie. A player can also register on the
+  leaderboard with a Solana wallet before their first call; the wallet signs an
+  ownership challenge, never a transaction.
 
 ## 🏗 How it works
 
@@ -115,10 +132,10 @@ flowchart TD
         sponsors --> fanout
     end
     subgraph db["Supabase, Postgres"]
-        picks["picks + settlements + sponsors"]
+        picks["picks + settlements + sponsors + terraces"]
     end
     subgraph web["Web app, Next.js 16 on Vercel"]
-        lobby["lobby, live match, replay, /sponsor"]
+        lobby["lobby, live match, replay, /sponsor, /t/code"]
         receipt["public receipt /r/id"]
     end
     subgraph solana["Solana mainnet"]
@@ -160,8 +177,12 @@ renders a distinct `pending` or `unavailable` status instead. A sponsor payment 
 cannot be verified on chain activates nothing, and a transaction signature is
 single-use by unique index, so a paid slot cannot be replayed. When a tape predates
 the feed's lineups records, every squad surface stays absent instead of rendering an
-empty shell. If Supabase is absent the worker still runs, in memory, and logs that
-state is not durable.
+empty shell. A worker restart cannot strand a pick: at boot, any pick left pending on
+a match that ended during the downtime is resolved by replaying that fixture's tape
+through the same reducers the live ingest uses. Two friends racing for a terrace's
+last seat cannot blow past the 40-seat cap: the join re-checks after the write and
+releases the overflow seat. If Supabase is absent the worker still runs, in memory,
+and logs that state is not durable.
 
 ### The call model
 
@@ -183,6 +204,7 @@ uses streaks, so its score is the market's own baseline.
 | Live app | [called-it-web-murex.vercel.app](https://called-it-web-murex.vercel.app) |
 | Proven receipt, merkle VALID + oracle VERIFIED | [/r/836a7729...](https://called-it-web-murex.vercel.app/r/836a7729-6ae0-4139-9248-5b79cfb87de1) |
 | Self-serve sponsor board, priced in SOL | [/sponsor](https://called-it-web-murex.vercel.app/sponsor) |
+| Terrace routes, live (an unknown code answers 404 `unknown_terrace`) | [/terraces/ABC234](https://worker-production-6555.up.railway.app/terraces/ABC234) |
 | Worker API, live health | [worker-production-6555.up.railway.app/health](https://worker-production-6555.up.railway.app/health) |
 | Proven pick, memo transaction | [tx 5Ppi...pqsQM](https://explorer.solana.com/tx/5PpiUYU6WgsfsN1cDwntTxK9XaWcdg5b1fZd5b2kRA3F8KQwMnXLE8GSaU9eoNMKjrGAcbGudEQLX54qDxDpqsQM) |
 | Mainnet subscription, Service Level 12 | [tx DnHr...5bGx](https://explorer.solana.com/tx/DnHrZaGbp8fd84hsGJa1EeTAkfHMjvjZUrpT6Ktb8K2Dk5rKz6LQSsXgLRnWVRtdX9VcCjTfKxtc3ajvMN75bGx) |
@@ -218,10 +240,10 @@ pnpm install
 cp .env.example .env
 pnpm -r run typecheck
 pnpm --filter @calledit/engine test   # 50 tests
-pnpm --filter @calledit/worker test   # 83 tests
+pnpm --filter @calledit/worker test   # 89 tests
 ```
 
-Success: each command exits 0 with every assertion passing (50 and 83, checked in
+Success: each command exits 0 with every assertion passing (50 and 89, checked in
 this session). No network or wallet is needed for the test suites; they run against
 committed captures of real matches.
 
@@ -271,7 +293,13 @@ pnpm --filter @calledit/worker start  # serves on port 8787
   Losing the token with no linked wallet means starting a new player.
 - **Replay sessions are in-memory.** A Time Machine session (cap 6 concurrent, 30
   minute idle timeout) disappears on worker restart; the tapes themselves are durable
-  on a volume, and final scores on the lobby rail are read from those tapes.
+  on a volume, and final scores on the lobby shelf are read from those tapes.
+  Terraces are durable rows on Supabase; only under the no-database memory fallback
+  would a room vanish on restart.
+- **Two screenshots above are staged sessions.** The lobby and receipt captures are
+  production with real tournament data. The pitch XI, half-time report, and terrace
+  captures are the same deployed UI driven by a local data stub with sample squads,
+  because those states only exist mid-match with locked calls on screen.
 - **Free-tier Supabase pauses after 7 idle days.** A daily worker heartbeat keeps it
   awake through the judging window in late July.
 

@@ -9,8 +9,10 @@ const BASE_CLASSES =
   'inline-flex min-h-10 items-center justify-center gap-2 rounded-none px-4.5 text-sm font-medium transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97] disabled:cursor-not-allowed disabled:active:scale-100';
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-white [box-shadow:var(--shadow-btn-primary)] disabled:opacity-75',
-  secondary: 'bg-ink text-white [box-shadow:var(--shadow-btn-secondary)] disabled:opacity-75',
+  primary:
+    'bg-accent text-[var(--on-accent)] [box-shadow:var(--shadow-btn-primary)] disabled:opacity-75',
+  secondary:
+    'bg-[var(--plate)] text-white [box-shadow:var(--shadow-btn-secondary)] disabled:opacity-75',
   ghost:
     'border border-hairline bg-transparent text-ink disabled:border-hairline disabled:text-ink-muted',
 };

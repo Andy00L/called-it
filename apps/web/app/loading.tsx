@@ -1,5 +1,6 @@
 import { Skeleton } from '../components/ui/skeleton';
 import { Eyebrow } from '../components/ui/eyebrow';
+import { BroadcastShell } from '../components/ui/broadcast-shell';
 import { StadiumBowlSkeleton } from '../components/lobby/stadium-bowl';
 
 /** One shelf edition skeleton on the floodlit stage. */
@@ -16,8 +17,8 @@ function RailCardSkeleton() {
 /** Lobby loading state: skeletons mirroring the bowl and the programme shelf. */
 export default function LobbyLoading() {
   return (
-    <div className="broadcast broadcast-field min-h-dvh overflow-x-clip">
-      <main aria-busy className="mx-auto w-full max-w-[1240px] px-5 pb-16 pt-6 sm:px-8">
+    <BroadcastShell>
+      <div aria-busy>
         <div className="gilt-plate flex items-center justify-between gap-4 rounded-[12px] px-6 py-3.5">
           <span className="whitespace-nowrap text-[17px] font-bold tracking-[0.15em] text-ink [text-shadow:0_1px_0_rgba(0,0,0,0.6)]">
             CALLED IT
@@ -53,7 +54,7 @@ export default function LobbyLoading() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </BroadcastShell>
   );
 }

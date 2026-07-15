@@ -2,8 +2,9 @@ import { Eyebrow } from '../ui/eyebrow';
 import { formatProbability } from '../../lib/format';
 
 /**
- * The Bookie's ink card (screen 01): the ghost opponent speaks in one line.
- * The dark plate is the secondary-button material, used once per screen.
+ * The Bookie's bronze plate (broadcast match export): the ghost opponent
+ * speaks in one line under a quiet bowler-hat watermark. The bronze panel
+ * appears in the bottom row only.
  */
 export function BookieCard({
   lastMirroredProbability,
@@ -14,24 +15,29 @@ export function BookieCard({
   return (
     <section
       aria-label="The Bookie"
-      className="rounded-card bg-ink px-4.5 py-4 text-white [box-shadow:var(--shadow-btn-secondary)]"
+      className="bc-bronze relative overflow-hidden px-5 py-4.5"
     >
-      <span className="inline-flex items-center gap-[7px] text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">
-        <span aria-hidden className="text-[9px] text-accent">
-          &#9656;
-        </span>
-        The Bookie
-        <span aria-hidden className="text-[9px] text-accent">
-          &#9666;
-        </span>
-      </span>
-      <p className="mt-2 text-sm leading-normal text-white/85">
+      <svg
+        aria-hidden
+        width="150"
+        height="150"
+        viewBox="0 0 24 24"
+        fill="rgba(217,188,106,0.07)"
+        className="absolute -top-3.5 right-[-20px]"
+      >
+        <path d="M7 9 c0 -3 2 -5 5 -5 s5 2 5 5 l.6 1.8 c2.4 .3 4.4 1 4.4 1.9 0 1.3 -4.5 2.3 -10 2.3 S2 14 2 12.7 c0 -.9 2 -1.6 4.4 -1.9 Z" />
+      </svg>
+      <Eyebrow>The Bookie</Eyebrow>
+      <p className="relative mt-3 text-sm leading-relaxed text-ink-muted">
         {lastMirroredProbability === null ? (
-          'The Bookie always takes the market favorite. Beat it.'
+          <>
+            The Bookie always takes the market favorite.{' '}
+            <span className="font-semibold italic text-accent-deep">Beat it.</span>
+          </>
         ) : (
           <>
             Mirrored your call at the market favorite{' '}
-            <span className="tabular font-mono font-semibold text-white">
+            <span className="tabular font-mono font-semibold text-ink">
               {formatProbability(lastMirroredProbability)}
             </span>
           </>

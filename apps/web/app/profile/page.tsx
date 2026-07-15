@@ -7,10 +7,11 @@ import { readStoredSession, storeSession } from '../../lib/player';
 import { getProfile } from '../../lib/game-api';
 import { EmptyState } from '../../components/ui/empty-state';
 import { Skeleton } from '../../components/ui/skeleton';
-import { Card, Tray } from '../../components/ui/surface';
+import { Card, PaperPanel, Tray } from '../../components/ui/surface';
 import { Button } from '../../components/ui/button';
 import { buttonClassName } from '../../components/ui/button-styles';
 import { Eyebrow } from '../../components/ui/eyebrow';
+import { BroadcastShell, BroadcastTopBar } from '../../components/ui/broadcast-shell';
 import { IdentityCard } from '../../components/profile/identity-card';
 import { StatsCards } from '../../components/profile/stats-cards';
 import { BookieDuel } from '../../components/profile/bookie-duel';
@@ -22,32 +23,6 @@ type ProfileView =
   | { kind: 'no_identity' }
   | { kind: 'error' }
   | { kind: 'ready'; session: GuestSession; profile: ProfilePayload };
-
-function TopBar() {
-  return (
-    <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3 pb-3.5 pt-3">
-      <Link
-        href="/"
-        aria-label="Back to the lobby"
-        className="inline-flex size-11 items-center justify-center border border-hairline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97]"
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-          <path
-            d="M10 3L5 8l5 5"
-            stroke="var(--ink)"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </Link>
-      <span className="justify-self-center">
-        <Eyebrow>Your profile</Eyebrow>
-      </span>
-      <span />
-    </div>
-  );
-}
 
 function LoadingLayout() {
   return (
@@ -121,64 +96,70 @@ export default function ProfilePage() {
   }, [reloadCount]);
 
   return (
-    <main className="mx-auto w-full max-w-[640px] px-5 pb-20 sm:px-7.5">
-      <TopBar />
+    <BroadcastShell>
+      <div className="mx-auto w-full max-w-[680px]">
+        <BroadcastTopBar eyebrow={<Eyebrow>Your profile</Eyebrow>} />
 
-      {view.kind === 'loading' ? (
-        <LoadingLayout />
-      ) : view.kind === 'no_identity' ? (
-        <>
-          <Tray className="p-2">
-            <EmptyState
-              motif="flag"
-              title="Lock your first call during a live match"
-              action={
-                <Link href="/" className={buttonClassName('primary')}>
-                  See live matches
-                </Link>
-              }
-            />
-          </Tray>
-          <WalletRestore
-            onRestored={(session) => {
-              storeSession(session);
-              setReloadCount((count) => count + 1);
-            }}
-          />
-        </>
-      ) : view.kind === 'error' ? (
-        <Tray className="p-2">
-          <EmptyState
-            motif="error"
-            title="Your profile did not load"
-            action={
-              <Button variant="primary" onClick={() => setReloadCount((count) => count + 1)}>
-                Retry
-              </Button>
-            }
-          />
-        </Tray>
-      ) : (
-        <ProfileBody
-          session={view.session}
-          profile={view.profile}
-          onRenamed={(handle) => {
-            setView({
-              kind: 'ready',
-              session: { ...view.session, handle },
-              profile: { ...view.profile, handle },
-            });
-          }}
-          onWalletLinked={(walletPubkey) => {
-            setView({
-              kind: 'ready',
-              session: view.session,
-              profile: { ...view.profile, walletPubkey },
-            });
-          }}
-        />
-      )}
-    </main>
+        <PaperPanel>
+          <div className="p-3">
+            {view.kind === 'loading' ? (
+              <LoadingLayout />
+            ) : view.kind === 'no_identity' ? (
+              <>
+                <Tray className="p-2">
+                  <EmptyState
+                    motif="flag"
+                    title="Lock your first call during a live match"
+                    action={
+                      <Link href="/" className={buttonClassName('primary')}>
+                        See live matches
+                      </Link>
+                    }
+                  />
+                </Tray>
+                <WalletRestore
+                  onRestored={(session) => {
+                    storeSession(session);
+                    setReloadCount((count) => count + 1);
+                  }}
+                />
+              </>
+            ) : view.kind === 'error' ? (
+              <Tray className="p-2">
+                <EmptyState
+                  motif="error"
+                  title="Your profile did not load"
+                  action={
+                    <Button variant="primary" onClick={() => setReloadCount((count) => count + 1)}>
+                      Retry
+                    </Button>
+                  }
+                />
+              </Tray>
+            ) : (
+              <ProfileBody
+                session={view.session}
+                profile={view.profile}
+                onRenamed={(handle) => {
+                  setView({
+                    kind: 'ready',
+                    session: { ...view.session, handle },
+                    profile: { ...view.profile, handle },
+                  });
+                }}
+                onWalletLinked={(walletPubkey) => {
+                  setView({
+                    kind: 'ready',
+                    session: view.session,
+                    profile: { ...view.profile, walletPubkey },
+                  });
+                }}
+              />
+            )}
+          </div>
+        </PaperPanel>
+      </div>
+    </BroadcastShell>
   );
 }
 

@@ -23,7 +23,8 @@ import { armPrintFeedback } from '../../lib/print-feedback';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { Eyebrow } from '../ui/eyebrow';
-import { Card, Tray } from '../ui/surface';
+import { Card, PaperPanel, Tray } from '../ui/surface';
+import { BroadcastTopBar } from '../ui/broadcast-shell';
 import { buttonClassName } from '../ui/button-styles';
 import { MatchCockpit } from './match-cockpit';
 import { CallCard } from './call-card';
@@ -51,31 +52,11 @@ interface LockedEntry {
   bookieProbability: number | null;
 }
 
-function BackButton() {
-  return (
-    <Link
-      href="/"
-      aria-label="Back to the lobby"
-      className="inline-flex size-11 items-center justify-center border border-hairline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97]"
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-        <path
-          d="M10 3L5 8l5 5"
-          stroke="var(--ink)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </Link>
-  );
-}
-
 function ReconnectingBanner() {
   return (
     <div
       role="status"
-      className="flex items-center gap-2.5 rounded-chip bg-ink px-3.5 py-2.5 text-white"
+      className="flex items-center gap-2.5 rounded-chip bg-[var(--plate)] px-3.5 py-2.5 text-white"
     >
       <svg
         width="14"
@@ -110,6 +91,7 @@ function LoadingLayout() {
       </div>
       <div className="flex flex-wrap items-start gap-5">
         <div className="min-w-0 flex-[1_1_430px]">
+          <PaperPanel>
           <Tray className="p-2">
             <Card className="p-5">
               <div className="flex items-center justify-center gap-3.5">
@@ -134,8 +116,10 @@ function LoadingLayout() {
               </div>
             </Card>
           </Tray>
+          </PaperPanel>
         </div>
         <div className="min-w-0 flex-[1_1_360px]">
+          <PaperPanel>
           <Tray className="p-2">
             <div className="mx-2.5 mb-2 mt-1">
               <Skeleton tone="deep" className="h-2 w-19" />
@@ -159,6 +143,7 @@ function LoadingLayout() {
               ))}
             </Card>
           </Tray>
+          </PaperPanel>
         </div>
       </div>
     </div>
@@ -332,17 +317,19 @@ export function MatchScreen({
   if (payload === null) {
     return (
       <div className="mt-6">
-        <Tray className="p-2">
-          <EmptyState
-            motif="error"
-            title="The feed dropped"
-            action={
-              <Link href="/" className={buttonClassName('primary')}>
-                Back to the lobby
-              </Link>
-            }
-          />
-        </Tray>
+        <PaperPanel>
+          <div className="p-2">
+            <EmptyState
+              motif="error"
+              title="The feed dropped"
+              action={
+                <Link href="/" className={buttonClassName('primary')}>
+                  Back to the lobby
+                </Link>
+              }
+            />
+          </div>
+        </PaperPanel>
       </div>
     );
   }
@@ -519,11 +506,10 @@ export function MatchScreen({
         </>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3 pb-3.5 pt-3">
-        <BackButton />
-        <Eyebrow className="text-center">{competition}</Eyebrow>
-        <LatencyHud latency={payload.latency} connectionLost={connection === 'lost'} />
-      </div>
+      <BroadcastTopBar
+        eyebrow={<Eyebrow className="text-center">{competition}</Eyebrow>}
+        right={<LatencyHud latency={payload.latency} connectionLost={connection === 'lost'} />}
+      />
 
       {connection === 'lost' ? (
         <div className="mb-3.5">
@@ -535,21 +521,23 @@ export function MatchScreen({
 
       <div className="flex flex-wrap items-start gap-5">
         <div className="min-w-0 flex-[1_1_430px]">
-          <MatchCockpit
-            payload={payload}
-            participant1={participant1}
-            participant2={participant2}
-            startTimeMs={startTimeMs}
-            displayClockSeconds={displayClockSeconds}
-            connectionLost={connection === 'lost'}
-            pitchReduced={pitchReduced}
-            onTogglePitch={togglePitch}
-            sponsor={sponsorName}
-          />
+          <PaperPanel>
+            <MatchCockpit
+              payload={payload}
+              participant1={participant1}
+              participant2={participant2}
+              startTimeMs={startTimeMs}
+              displayClockSeconds={displayClockSeconds}
+              connectionLost={connection === 'lost'}
+              pitchReduced={pitchReduced}
+              onTogglePitch={togglePitch}
+              sponsor={sponsorName}
+            />
+          </PaperPanel>
         </div>
 
         <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-5">
-          {callsSection}
+          <PaperPanel>{callsSection}</PaperPanel>
 
           {payload.phase === 'live' && pendingMine.length > 0 ? (
             <section aria-label="Your open calls">
@@ -587,9 +575,9 @@ export function MatchScreen({
           </div>
         ) : null}
 
-        <section aria-label="Event feed" className="min-w-0 flex-[1_1_300px]">
+        <section aria-label="Event feed" className="bc-bronze min-w-0 flex-[1_1_300px] p-4.5">
           <Eyebrow>Event feed</Eyebrow>
-          <div className="mt-2.5">
+          <div className="panel-paper mt-3">
             <EventFeed
               events={payload.recentEvents}
               participant1={participant1}

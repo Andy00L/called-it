@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import type { FixtureLeaderboardEntry } from '@calledit/contracts';
 import { fetchFixtureLeaderboard } from '../../lib/api';
 import { Badge } from '../ui/badge';
-import { Card, Tray } from '../ui/surface';
+import { Card, PaperPanel, Tray } from '../ui/surface';
 import { Eyebrow } from '../ui/eyebrow';
 import { formatPoints } from '../../lib/format';
 
@@ -45,6 +45,7 @@ export function MatchBoard({
 
   return (
     <section aria-label="This match">
+      <PaperPanel>
       <Tray className="p-2">
         <div className="mx-2.5 mb-2 mt-1.5 flex">
           <Eyebrow>This match</Eyebrow>
@@ -73,6 +74,7 @@ export function MatchBoard({
           })}
         </Card>
       </Tray>
+      </PaperPanel>
     </section>
   );
 }

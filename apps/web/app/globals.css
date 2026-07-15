@@ -30,6 +30,10 @@
   --paper-rule: rgba(21, 21, 21, 0.3);
   /* Dark plate role (LED sponsor board): the ink plate on the light skin. */
   --plate: var(--ink);
+  /* Text on the accent surface; the broadcast skin flips it dark-on-gold. */
+  --on-accent: #ffffff;
+  /* Live-signal color: pitch green everywhere, kept green on the gold skin. */
+  --bc-live: var(--accent);
 
   /* motion tokens (sheet): durations ms, easing family, stagger 40ms */
   --duration-micro: 70ms;
@@ -126,7 +130,52 @@ body {
   --bc-btn-line: #6f5a2a;
   --bc-bronze-hi: #241b10;
   --bc-bronze-lo: #171108;
+  --on-accent: #241c0e;
   color: var(--ink);
+}
+
+/*
+ * Programme paper: the cream panel interior of the broadcast match export.
+ * Inside a gilt frame the role tokens map back to printed paper, so the
+ * existing token-driven components (Tray, Card, Eyebrow, CallCard, the
+ * cockpit) render the light programme untouched on the night field.
+ */
+.panel-paper {
+  --cream: #faf5e7;
+  --soft: #f4eeda;
+  --card: #f8f3e3;
+  --ink: #1e1b13;
+  --ink-muted: #5c5340;
+  --ink-faint: #8a8069;
+  --accent: #2f7d46;
+  --accent-deep: #24693a;
+  --accent-soft: #e6ead2;
+  --accent-line: rgba(47, 125, 70, 0.4);
+  --hairline: rgba(30, 27, 19, 0.14);
+  --pulse-mid: #c9bfa4;
+  --pulse-low: #b5a98a;
+  --skeleton-deep: #e4dcc0;
+  --band-track: rgba(30, 27, 19, 0.08);
+  --plate: #14100a;
+  --on-accent: #f7f2e0;
+  --bc-live: var(--accent);
+  --tray-inset: inset 0 0 6px 0 rgba(30, 27, 19, 0.14);
+  color: var(--ink);
+}
+/* The paper interior of a gilt frame (nested radius: 16 minus the 2.5px). */
+.gilt-frame-paper {
+  border-radius: 13px;
+  background: linear-gradient(180deg, #faf5e7 0%, #f1e9d3 100%);
+}
+
+/* Bronze side panel (the Bookie, the event feed frame). */
+.bc-bronze {
+  border-radius: var(--radius-tray);
+  border: 1px solid var(--bc-gilt-line);
+  background: linear-gradient(180deg, #14100a 0%, #0d0a05 100%);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(243, 220, 146, 0.12);
 }
 
 /* The night pitch field: floodlit green with mowing stripes and a vignette. */

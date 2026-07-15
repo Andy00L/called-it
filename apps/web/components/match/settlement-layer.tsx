@@ -87,7 +87,7 @@ export function SettlementLayer({
     return (
       <div
         role="status"
-        className="fixed bottom-5 left-1/2 z-50 w-[340px] max-w-[calc(100vw-40px)] -translate-x-1/2 rounded-card bg-ink px-4 py-3.5 text-white [animation:toast-in_var(--duration-standard)_var(--ease-enter)_both] [box-shadow:var(--shadow-float)]"
+        className="fixed bottom-5 left-1/2 z-50 w-[340px] max-w-[calc(100vw-40px)] -translate-x-1/2 rounded-card bg-[var(--plate)] px-4 py-3.5 text-white [animation:toast-in_var(--duration-standard)_var(--ease-enter)_both] [box-shadow:var(--shadow-float)]"
       >
         <p className="text-sm font-medium">{active.pick.claim}</p>
         <div className="mt-1.5 flex items-baseline gap-2.5">

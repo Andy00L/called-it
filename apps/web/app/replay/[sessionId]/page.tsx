@@ -1,3 +1,4 @@
+import type { Viewport } from 'next';
 import Link from 'next/link';
 import { fetchReplayTapes } from '../../../lib/api';
 import { fetchReplaySession } from '../../../lib/replay-api';
@@ -6,8 +7,14 @@ import { fetchSponsorBoard } from '../../../lib/sponsor-api';
 import { MatchScreen } from '../../../components/match/match-screen';
 import { SponsorTicker } from '../../../components/lobby/sponsor-ticker';
 import { EmptyState } from '../../../components/ui/empty-state';
-import { Tray } from '../../../components/ui/surface';
+import { PaperPanel } from '../../../components/ui/surface';
 import { buttonClassName } from '../../../components/ui/button-styles';
+import { BroadcastNav, BroadcastShell } from '../../../components/ui/broadcast-shell';
+
+export const viewport: Viewport = {
+  // sourceRef: docs/UI_DESIGN_SYSTEM.md, broadcast night field --cream.
+  themeColor: '#0A130C',
+};
 
 /**
  * Time Machine screen: the match screen in replay mode. Sessions are
@@ -27,23 +34,28 @@ export default async function ReplayPage({
 
   if (!sessionResult.ok) {
     return (
-      <main className="mx-auto w-full max-w-[640px] px-5 pb-20 pt-14 sm:px-7.5">
-        <Tray className="p-2">
-          <EmptyState
-            motif="error"
-            title={
-              sessionResult.reason === 'unknown_session'
-                ? 'This replay session expired'
-                : 'The Time Machine did not answer'
-            }
-            action={
-              <Link href="/" className={buttonClassName('primary')}>
-                Back to the lobby
-              </Link>
-            }
-          />
-        </Tray>
-      </main>
+      <BroadcastShell>
+        <BroadcastNav />
+        <div className="mx-auto mt-14 max-w-[640px]">
+          <PaperPanel>
+            <div className="p-2">
+              <EmptyState
+                motif="error"
+                title={
+                  sessionResult.reason === 'unknown_session'
+                    ? 'This replay session expired'
+                    : 'The Time Machine did not answer'
+                }
+                action={
+                  <Link href="/" className={buttonClassName('primary')}>
+                    Back to the lobby
+                  </Link>
+                }
+              />
+            </div>
+          </PaperPanel>
+        </div>
+      </BroadcastShell>
     );
   }
 
@@ -53,9 +65,10 @@ export default async function ReplayPage({
     : undefined;
 
   return (
-    <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+    <BroadcastShell>
+      <BroadcastNav />
       {/* Header board: renders only when someone has paid (product rule). */}
-      <div className="pt-3">
+      <div className="mt-4">
         <SponsorTicker sponsors={sponsorBoard} />
       </div>
       <MatchScreen
@@ -71,6 +84,6 @@ export default async function ReplayPage({
         startTimeMs={0}
         sponsorName={resolveSponsorName(sponsor)}
       />
-    </main>
+    </BroadcastShell>
   );
 }

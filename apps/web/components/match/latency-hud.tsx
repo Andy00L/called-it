@@ -12,9 +12,18 @@ export function LatencyHud({
   connectionLost: boolean;
 }) {
   const scoresP50 = latency?.scores?.p50Ms;
-  const reading = connectionLost || scoresP50 === undefined ? '…' : `${scoresP50}ms`;
+  const isMeasuring = connectionLost || scoresP50 === undefined;
+  const reading = isMeasuring ? '…' : `${scoresP50}ms`;
   return (
-    <span className="tabular whitespace-nowrap rounded-chip border border-dashed border-hairline px-2 py-[5px] font-mono text-xs text-ink-muted">
+    <span className="tabular inline-flex items-center gap-1.5 whitespace-nowrap rounded-chip border border-dashed border-hairline px-2.5 py-[5px] font-mono text-xs text-ink-muted">
+      <span
+        aria-hidden
+        className={`size-1.5 rounded-full ${
+          isMeasuring
+            ? 'bg-[var(--ink-faint)]'
+            : 'bg-[var(--bc-live)] [animation:dot-pulse_1.8s_var(--ease-standard)_infinite]'
+        }`}
+      />
       {reading} feed
     </span>
   );

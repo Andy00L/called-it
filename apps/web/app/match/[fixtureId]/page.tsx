@@ -1,9 +1,16 @@
+import type { Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { fetchFixtures } from '../../../lib/api';
 import { resolveSponsorName } from '../../../lib/sponsor';
 import { fetchSponsorBoard } from '../../../lib/sponsor-api';
 import { MatchScreen } from '../../../components/match/match-screen';
 import { SponsorTicker } from '../../../components/lobby/sponsor-ticker';
+import { BroadcastNav, BroadcastShell } from '../../../components/ui/broadcast-shell';
+
+export const viewport: Viewport = {
+  // sourceRef: docs/UI_DESIGN_SYSTEM.md, broadcast night field --cream.
+  themeColor: '#0A130C',
+};
 
 export default async function MatchPage({
   params,
@@ -26,9 +33,10 @@ export default async function MatchPage({
     : undefined;
 
   return (
-    <main className="mx-auto w-full max-w-[1060px] px-5 pb-20 sm:px-7.5">
+    <BroadcastShell>
+      <BroadcastNav />
       {/* Header board: renders only when someone has paid (product rule). */}
-      <div className="pt-3">
+      <div className="mt-4">
         <SponsorTicker sponsors={sponsorBoard} />
       </div>
       <MatchScreen
@@ -39,6 +47,6 @@ export default async function MatchPage({
         startTimeMs={fixture?.startTimeMs ?? 0}
         sponsorName={resolveSponsorName(sponsor)}
       />
-    </main>
+    </BroadcastShell>
   );
 }

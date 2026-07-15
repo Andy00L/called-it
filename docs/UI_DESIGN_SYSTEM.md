@@ -171,16 +171,26 @@ and on white alike.
 ## Broadcast night (lobby skin, 2026-07-14)
 
 Deliberate sheet extension (design-motion loop edge case: improvement enters
-through the sheet). The user approved a Claude Design export
-(`ui-design/return/new ui/loby`) that reskins the LOBBY ONLY as a floodlit
-night broadcast; every inner screen (match, leaderboard, profile, receipt,
-sponsor) keeps the printed programme above. The receipt stays the brand
-object, unchanged.
+through the sheet). The user approved two Claude Design exports
+(`ui-design/return/new ui/loby`, then `ui-design/return/match`) that carry
+the floodlit night broadcast across the lobby, the match and replay screens,
+the sponsor page, the leaderboard, and the profile. The receipt page keeps
+the printed programme; the thermal receipt stays the brand object, unchanged.
 
 Mechanism: the `.broadcast` scope in `apps/web/app/globals.css` remaps the
-palette ROLE tokens for the lobby subtree, so shared primitives (Eyebrow,
+palette ROLE tokens for a page subtree, so shared primitives (Eyebrow,
 Skeleton, EmptyState, DuelLine) reskin without forking. Broadcast-only roles
-are prefixed `--bc-`.
+are prefixed `--bc-`. Inside a gilt frame, the `.panel-paper` scope maps the
+roles BACK to printed programme paper (field `#FAF5E7`, ink `#1E1B13`, green
+accent `#2F7D46`), so the whole match cockpit, the call deck, the standings,
+the sponsor form, and the profile render their existing token-driven markup
+as cream panels on the night field (the match export's look). The shared
+shell lives in `components/ui/broadcast-shell.tsx` (BroadcastShell,
+BroadcastNav, BroadcastTopBar) and the paper wrapper is `PaperPanel` in
+`components/ui/surface.tsx`. Two cross-skin roles keep inverse surfaces
+honest: `--plate` (dark plate: ink on the light skin, `#10151B` on
+broadcast) and `--on-accent` (text on the accent surface: white on green,
+dark bronze on gold).
 
 | Role | Token | Value | Notes |
 | --- | --- | --- | --- |

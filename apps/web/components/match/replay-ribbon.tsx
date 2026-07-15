@@ -35,7 +35,7 @@ export function ReplayRibbon({
                 aria-pressed={isActive}
                 className={`tabular h-10 min-w-12 rounded-none font-mono text-[13px] transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] active:scale-[0.97] ${
                   isActive
-                    ? 'bg-accent text-white [box-shadow:0_0_0_1px_var(--accent-deep)_inset]'
+                    ? 'bg-accent text-[var(--on-accent)] [box-shadow:0_0_0_1px_var(--accent-deep)_inset]'
                     : 'bg-card text-ink [box-shadow:0_0_0_1px_var(--hairline)_inset]'
                 }`}
               >

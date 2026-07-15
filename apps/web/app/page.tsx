@@ -6,6 +6,11 @@ import { buildWheelTeams, type WheelTeam } from '../lib/teams';
 import { EmptyState } from '../components/ui/empty-state';
 import { Eyebrow } from '../components/ui/eyebrow';
 import { Tray } from '../components/ui/surface';
+import {
+  BROADCAST_NAV_LINK_CLASSES,
+  BroadcastNav,
+  BroadcastShell,
+} from '../components/ui/broadcast-shell';
 import { StadiumBowl } from '../components/lobby/stadium-bowl';
 import { GoldTrophy } from '../components/lobby/gold-trophy';
 import { ProgrammeRail, type RailEntry } from '../components/lobby/programme-rail';
@@ -17,29 +22,6 @@ export const viewport: Viewport = {
   // sourceRef: docs/UI_DESIGN_SYSTEM.md, broadcast night field --cream.
   themeColor: '#0A130C',
 };
-
-function NavCard() {
-  const navLinkClasses =
-    'gilt-btn inline-flex min-h-10 items-center justify-center rounded-card px-4.5 text-sm font-semibold text-ink no-underline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] hover:text-white active:scale-[0.97]';
-  return (
-    <nav
-      aria-label="Main"
-      className="gilt-plate flex items-center justify-between gap-4 rounded-[12px] px-6 py-3.5"
-    >
-      <span className="whitespace-nowrap text-[17px] font-bold tracking-[0.15em] text-ink [text-shadow:0_1px_0_rgba(0,0,0,0.6)]">
-        CALLED IT
-      </span>
-      <div className="flex gap-2.5">
-        <Link href="/leaderboard" className={navLinkClasses}>
-          Leaderboard
-        </Link>
-        <Link href="/profile" className={navLinkClasses}>
-          Profile
-        </Link>
-      </div>
-    </nav>
-  );
-}
 
 function HeroText() {
   return (
@@ -54,17 +36,6 @@ function HeroText() {
         Priced by the market. Settled by the feed. Anchored on-chain.
       </p>
     </>
-  );
-}
-
-/** The night-field shell every lobby branch renders inside. The top padding
- *  lives on main (not a child margin) so nothing collapses through the shell
- *  and exposes the cream body above the night field. */
-function BroadcastShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="broadcast broadcast-field min-h-dvh overflow-x-clip">
-      <main className="mx-auto w-full max-w-[1240px] px-5 pb-16 pt-6 sm:px-8">{children}</main>
-    </div>
   );
 }
 
@@ -95,7 +66,7 @@ export default async function LobbyPage() {
   if (!fixturesResult.ok) {
     return (
       <BroadcastShell>
-        <NavCard />
+        <BroadcastNav />
         <header className="mx-auto mb-14 mt-16 max-w-[760px] text-center">
           <HeroText />
         </header>
@@ -107,10 +78,7 @@ export default async function LobbyPage() {
             motif="error"
             title="The feed dropped"
             action={
-              <Link
-                href="/"
-                className="gilt-btn inline-flex min-h-10 items-center justify-center rounded-card px-4.5 text-sm font-semibold text-ink no-underline transition-transform duration-[var(--duration-micro)] ease-[var(--ease-standard)] hover:text-white active:scale-[0.97]"
-              >
+              <Link href="/" className={BROADCAST_NAV_LINK_CLASSES}>
                 Retry
               </Link>
             }
@@ -211,7 +179,7 @@ export default async function LobbyPage() {
 
   return (
     <BroadcastShell>
-      <NavCard />
+      <BroadcastNav />
       {/* Header board: renders only when someone has paid (product rule). */}
       <div className="mt-4">
         <SponsorTicker sponsors={sponsorBoard} />
